@@ -32,7 +32,7 @@ Each project pins the bundles it needs in `.agents/skills.lock.toml`:
 | `awake-core-math` | Rules for using Awake's `core.math` types (Vec3, Mat4, Camera) and for writing per-frame ECS systems without allocating |
 | `awake-ecs-authoring` | Rules for authoring Awake ECS components, systems and scenes - component construction, query/family costs, structural-change churn, entity lifecycle, and the scene DSL |
 | `awake-ecs-scene-runtime` | Consume Awake ECS scenes from a game or sample: scene documents, entity content, scene sessions, scheduling, and lifecycle-safe activation |
-| `awake-editor-plugin-authoring` | Write an editor plugin for Awake Studio or any other Awake editor host against the public Apache contract com.awakekt:awake-editor-contract |
+| `awake-editor-plugin-authoring` | Write an editor plugin for Awake Studio or any other Awake editor host against the public Apache contract com.awakekt.awake.editor:contract |
 | `awake-fbx-asset-cooking` | Convert FBX source assets, including Mixamo characters and clips, into Awake-compatible GLB assets |
 | `awake-render-debug-views` | Look inside an Awake 3D frame instead of guessing |
 | `awake-shadcn-recipe-consuming` | Consume Awake's in-repository shadcn design system from a sample, game, or application |

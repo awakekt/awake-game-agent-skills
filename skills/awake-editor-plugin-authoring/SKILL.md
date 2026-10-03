@@ -1,6 +1,6 @@
 ---
 name: awake-editor-plugin-authoring
-description: Write an editor plugin for Awake Studio or any other Awake editor host against the public Apache contract com.awakekt:awake-editor-contract. Use before writing a plugin manifest, an EditorPlugin, providers, an asset converter, or a project plugin reference.
+description: Write an editor plugin for Awake Studio or any other Awake editor host against the public Apache contract com.awakekt.awake.editor:contract. Use before writing a plugin manifest, an EditorPlugin, providers, an asset converter, or a project plugin reference.
 license: Apache-2.0
 metadata:
   author: awake
@@ -10,7 +10,7 @@ metadata:
 
 # Writing an Awake Editor Plugin
 
-A plugin compiles against `com.awakekt:awake-editor-contract` (Apache-2.0) and nothing from a
+A plugin compiles against `com.awakekt.awake.editor:contract` (Apache-2.0) and nothing from a
 particular editor. Any host that implements the contract can install it; Awake Studio is one such
 host and adds discovery, signature checks and entitlement on top. Keep plugin runtime out of the
 plugin: whatever a game needs at run time belongs in an Awake Core module or the game, and the
@@ -66,23 +66,47 @@ interface PluginLifecycle {
 
 Plugins extend editor capabilities by returning typed `EditorProvider` implementations from `createProviders()`:
 
-| `EditorProviderKind` | Purpose | Typed sub-interface |
-|---|---|---|
-| `Component` | Custom component panels | `ComponentProvider` |
-| `Asset` | Asset import/processing | `AssetProvider` |
-| `Environment` | Sky, lighting, ambient | `EnvironmentProvider` |
-| `Animation` | Animation curves/clips | `AnimationProvider` |
-| `Build` | Build steps & export | `BuildProvider` |
-| `BottomPanel` | Docked bottom tray panels | (raw `EditorProvider`) |
-| `Toolbar` | Toolbar actions & controls | (raw `EditorProvider`) |
-| `Sidebar` | Left sidebar tabs | (raw `EditorProvider`) |
-| `InspectorPanel` | Right inspector tabs | (raw `EditorProvider`) |
-| `Keybinding` | Keyboard shortcut maps | (raw `EditorProvider`) |
-| `Workspace` | Central canvas (viewport, visual scripting) | (raw `EditorProvider`) |
-| `EntityTemplate` | Insertable entity archetypes | (raw `EditorProvider`) |
-| `SceneSystems` | ECS systems injected into the scene loop | (raw `EditorProvider`) |
-| `ViewportTool` | Interactive viewport tools | (raw `EditorProvider`) |
-| `FloatingCard` | Floating HUD cards over the 3D viewport | (raw `EditorProvider`) |
+The full reference is the contract README:
+<https://github.com/awakekt/awake/blob/main/awake/editor/contract/README.md>. Implement the
+interface for the slot you want; each fixes its own `kind` and defaults its codec to
+`NoProviderConfiguration`, so a provider without configuration needs neither.
+
+| Kind | Implement | Use it for | The host keeps |
+|---|---|---|---|
+| `BottomPanel`, `Sidebar`, `InspectorPanel` | `PanelProvider` (set `kind`) | A panel of your own UI | The tab, labelled with `metadata.displayName` |
+| `Toolbar` | `ToolbarProvider` | A button or small control | Placement; `displayName` is the tooltip |
+| `Workspace` | `WorkspaceProvider` | A whole central canvas: node graph, map editor | The switcher and the canvas size |
+| `FloatingCard` | `FloatingCardProvider` | A card over the viewport | Docking and order (`FloatingCardDeck`) |
+| `Keybinding` | `KeybindingProvider` | Shortcuts for your actions | The keymap, rebinding, conflicts |
+| `EntityTemplate` | `EntityTemplateProvider` | An insertable entity with your components | The insert menu and insertion |
+
+Asset import is `AssetConverterPlugin`, not a provider kind. `Component`, `SceneSystems`,
+`ViewportTool`, `Asset`, `Environment`, `Animation` and `Build` are reserved: the contract gives them
+no behaviour yet, so a plugin that relies on one is tied to whichever host interprets it.
+
+#### Drawing UI
+
+Panels, toolbar controls, workspaces and cards draw with Awake Compose
+(`context(_: Composer)`) and Core's shadcn recipes, never an editor's own UI library. They change
+data the game runtime reads; they never hold game state themselves.
+
+```kotlin
+class WeatherPanel : PanelProvider {
+    override val metadata = ProviderMetadata(ProviderId("com.example.weather.panel"), "Weather")
+    override val kind = EditorProviderKind.BottomPanel
+
+    context(_: Composer)
+    override fun content() {
+        ShadcnButton("Make it rain", onClick = { /* change data the game runtime reads */ })
+    }
+}
+```
+
+#### Keys and templates
+
+`Keybinding.execute()` takes no host context: act on your plugin's own state and return true when
+you handled the key. `EntityTemplate.configure(world, entity)` adds scene components only; the
+render systems build GPU resources from them.
 
 ### 4. `PluginRegistry` & `ProviderRegistry`
 
