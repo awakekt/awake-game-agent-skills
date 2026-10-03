@@ -1,0 +1,4 @@
+# Read by scripts/verify_bundle.py; the same script runs in every Awake skill bundle.
+name = "awake-game-agent-skills"
+license = "Apache-2.0"
+namespace = "awake"
