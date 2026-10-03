@@ -73,16 +73,39 @@ Plugins extend editor capabilities by returning typed `EditorProvider` implement
 | `Environment` | Sky, lighting, ambient | `EnvironmentProvider` |
 | `Animation` | Animation curves/clips | `AnimationProvider` |
 | `Build` | Build steps & export | `BuildProvider` |
-| `BottomPanel` | Docked bottom tray panels | (raw `EditorProvider`) |
-| `Toolbar` | Toolbar actions & controls | (raw `EditorProvider`) |
-| `Sidebar` | Left sidebar tabs | (raw `EditorProvider`) |
-| `InspectorPanel` | Right inspector tabs | (raw `EditorProvider`) |
-| `Keybinding` | Keyboard shortcut maps | (raw `EditorProvider`) |
-| `Workspace` | Central canvas (viewport, visual scripting) | (raw `EditorProvider`) |
-| `EntityTemplate` | Insertable entity archetypes | (raw `EditorProvider`) |
-| `SceneSystems` | ECS systems injected into the scene loop | (raw `EditorProvider`) |
-| `ViewportTool` | Interactive viewport tools | (raw `EditorProvider`) |
-| `FloatingCard` | Floating HUD cards over the 3D viewport | (raw `EditorProvider`) |
+| `BottomPanel` | Docked bottom tray panels | `PanelProvider` |
+| `Toolbar` | Toolbar actions & controls | host-defined |
+| `Sidebar` | Left sidebar tabs | `PanelProvider` |
+| `InspectorPanel` | Right inspector tabs | `PanelProvider` |
+| `Keybinding` | Keyboard shortcut maps | host-defined |
+| `Workspace` | Central canvas (viewport, visual scripting) | host-defined |
+| `EntityTemplate` | Insertable entity archetypes | host-defined |
+| `SceneSystems` | ECS systems injected into the scene loop | host-defined |
+| `ViewportTool` | Interactive viewport tools | host-defined |
+| `FloatingCard` | Floating HUD cards over the 3D viewport | host-defined |
+
+#### Drawing a panel
+
+A `PanelProvider` draws its own UI with Awake Compose, so the plugin needs only the Apache contract
+and Core's `awake-ui-shadcn` recipes, never an editor's own UI library. The host owns the tab and
+labels it with `metadata.displayName`; `kind` picks the slot, and the registry rejects any kind
+outside `PanelProvider.PANEL_KINDS`.
+
+```kotlin
+class WeatherPanel : PanelProvider {
+    override val metadata = ProviderMetadata(ProviderId("com.example.weather.panel"), "Weather")
+    override val kind = EditorProviderKind.BottomPanel
+    override val codec: ProviderCodec = WeatherCodec
+
+    context(_: Composer)
+    override fun content() {
+        ShadcnButton("Make it rain", onClick = { /* emit data the game runtime reads */ })
+    }
+}
+```
+
+Kinds marked host-defined have no drawing or behaviour hook in the contract yet; each host
+supplies its own interface for them, so a plugin that uses one is tied to that host.
 
 ### 4. `PluginRegistry` & `ProviderRegistry`
 
