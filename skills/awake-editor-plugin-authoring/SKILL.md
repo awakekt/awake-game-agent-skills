@@ -1,6 +1,6 @@
 ---
 name: awake-editor-plugin-authoring
-description: Write an editor plugin for Awake Studio or any other Awake editor host against the public Apache contract com.awakekt:awake-editor-contract. Use before writing a plugin manifest, an EditorPlugin, providers, an asset converter, or a project plugin reference.
+description: Write an editor plugin for Awake Studio or any other Awake editor host against the public Apache contract com.awakekt.awake.editor:contract. Use before writing a plugin manifest, an EditorPlugin, providers, an asset converter, or a project plugin reference.
 license: Apache-2.0
 metadata:
   author: awake
@@ -10,7 +10,7 @@ metadata:
 
 # Writing an Awake Editor Plugin
 
-A plugin compiles against `com.awakekt:awake-editor-contract` (Apache-2.0) and nothing from a
+A plugin compiles against `com.awakekt.awake.editor:contract` (Apache-2.0) and nothing from a
 particular editor. Any host that implements the contract can install it; Awake Studio is one such
 host and adds discovery, signature checks and entitlement on top. Keep plugin runtime out of the
 plugin: whatever a game needs at run time belongs in an Awake Core module or the game, and the
