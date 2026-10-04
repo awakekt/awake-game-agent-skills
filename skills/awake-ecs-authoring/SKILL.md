@@ -73,7 +73,7 @@ The ECS `World` is the **Single Source of Truth** for both runtime simulation an
 2. **Ephemeral Tool Capability Components** (`TerrainBrushComponent`, `CameraGizmoComponent`, `Selectable`):
    - Attached to the entity in `World` only while actively authoring.
    - Hold interactive tool state: brush radius, strength, falloff, sculpt tool, brush shape, target height, active layer, viewport shading mode (`Textured`, `SplatRgba`, `Satellite`).
-   - Systems (`TerrainMeshRuntimeSystem`, `TerrainBrushViewportTool`) read directly from these components each frame.
+   - Systems and editor tools (a `TerrainMeshRuntimeSystem`, a plugin `ViewportToolProvider` brush) read directly from these components each frame.
 3. **Stateless UI Panels**:
    - Compose UI panels and inspector state holders (`*InspectorState`) are pure observers and controllers.
    - **Never store canonical domain or tool state in UI-only memory.** UI state must synchronize with the entity's ECS components in the `World` immediately on interaction.
