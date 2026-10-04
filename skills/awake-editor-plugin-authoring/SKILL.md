@@ -4,8 +4,8 @@ description: Write an editor plugin for Awake Studio or any other Awake editor h
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-10-03'
-  keywords: Awake, editor plugin, EditorPlugin, PluginManifest, EditorProvider, ProviderRegistry, AssetConverter, .awakeplugin
+  last-updated: '2026-10-04'
+  keywords: Awake, editor plugin, EditorPlugin, PluginManifest, EditorProvider, ProviderRegistry, AssetConverter, .awakeplugin, ViewportToolProvider, SceneSystemsProvider, ComponentInspectorProvider, EditHistory, undo
 ---
 
 # Writing an Awake Editor Plugin
@@ -79,10 +79,13 @@ interface for the slot you want; each fixes its own `kind` and defaults its code
 | `FloatingCard` | `FloatingCardProvider` | A card over the viewport | Docking and order (`FloatingCardDeck`) |
 | `Keybinding` | `KeybindingProvider` | Shortcuts for your actions | The keymap, rebinding, conflicts |
 | `EntityTemplate` | `EntityTemplateProvider` | An insertable entity with your components | The insert menu and insertion |
+| `ViewportTool` | `ViewportToolProvider` | A brush or placement tool in the viewport | Which tool is active; reserved gestures such as orbit |
+| `SceneSystems` | `SceneSystemsProvider` | ECS systems that run while editing: snapping, previews | The edit loop; never runs in play mode |
+| `Component` | `ComponentInspectorProvider` | Inspector fields for your component type | How fields look; section order |
 
-Asset import is `AssetConverterPlugin`, not a provider kind. `Component`, `SceneSystems`,
-`ViewportTool`, `Asset`, `Environment`, `Animation` and `Build` are reserved: the contract gives them
-no behaviour yet, so a plugin that relies on one is tied to whichever host interprets it.
+Asset import is `AssetConverterPlugin`, not a provider kind. `Asset`, `Environment`, `Animation` and
+`Build` are reserved: the contract gives them no behaviour yet, so a plugin that relies on one is
+tied to whichever host interprets it.
 
 #### Drawing UI
 
@@ -107,6 +110,67 @@ class WeatherPanel : PanelProvider {
 `Keybinding.execute()` takes no host context: act on your plugin's own state and return true when
 you handled the key. `EntityTemplate.configure(world, entity)` adds scene components only; the
 render systems build GPU resources from them.
+
+#### Scene edits and undo
+
+Two rules hold for every scene hook (decision
+[D36](https://github.com/awakekt/awake/blob/main/docs/architecture/decisions/D36-scene-bound-editor-hooks.md)):
+
+1. **Every scene edit goes through the host's undo.** Run an `EditCommand` with
+   `EditHistory.execute`, or, for a drag that writes live values each frame, `record` one command
+   when it ends. Never keep a private undo stack. `InspectorFieldScope` fields record their own
+   steps.
+2. **Edit-time systems never run in play mode.** `SceneSystemsProvider.createSystems()` runs only on
+   the edited world. Gameplay is runtime code the game registers, not a plugin system.
+
+A tool reads the pointer ray from `ViewportContext.pointerRay()`, edits live during the drag, and
+records one undo step on release:
+
+```kotlin
+class PlaceMarkerTool : ViewportToolProvider {
+    override val metadata = ProviderMetadata(ProviderId("com.example.marker.tool"), "Place marker")
+    private var before: Vec3f? = null
+
+    override fun isApplicable(context: ViewportContext) =
+        context.selection.primary?.let { context.world.get<Marker>(it) } != null
+
+    override fun onPointerDrag(context: ViewportContext): Boolean {
+        val marker = context.selection.primary?.let { context.world.get<Marker>(it) }
+        val hit = context.pointerRay()?.intersectGroundPlane()
+        if (marker == null || hit == null) return false
+        if (before == null) before = marker.position.copy()
+        marker.position.set(hit.x, hit.y, hit.z)
+        return true
+    }
+
+    override fun onPointerUp(context: ViewportContext) {
+        val marker = context.selection.primary?.let { context.world.get<Marker>(it) } ?: return
+        val start = before ?: return
+        before = null
+        val end = marker.position.copy()
+        context.history.record(object : EditCommand {
+            override val label = "Place marker"
+            override fun apply() { marker.position.set(end.x, end.y, end.z) }
+            override fun revert() { marker.position.set(start.x, start.y, start.z) }
+        })
+    }
+}
+```
+
+An inspector reads the component defensively, since a system may remove it before the fields draw:
+
+```kotlin
+class MarkerInspector : ComponentInspectorProvider {
+    override val metadata = ProviderMetadata(ProviderId("com.example.marker.inspector"), "Marker")
+    override val componentType = Marker::class
+
+    override fun fields(scope: InspectorFieldScope, world: World, entity: Entity) {
+        val marker = world.get<Marker>(entity) ?: return
+        scope.vector("Position", marker.position)
+        scope.scalar("Size", marker.size) { marker.size = it }
+    }
+}
+```
 
 ### 4. `PluginRegistry` & `ProviderRegistry`
 
