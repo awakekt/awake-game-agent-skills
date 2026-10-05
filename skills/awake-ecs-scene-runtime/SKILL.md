@@ -3,11 +3,11 @@ name: awake-ecs-scene-runtime
 description: >
   Consume Awake ECS scenes from a game or sample: scene documents, entity content, scene sessions,
   scheduling, and lifecycle-safe activation. Use before wiring 3D scene content; it prevents
-  duplicate scene/UI hosts and keeps ECS systems with their capability components.
+  duplicate scene/UI hosts and keeps scene bindings apart from the capability logic they wrap.
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-10-03'
+  last-updated: '2026-10-05'
   keywords: Awake, ECS, World, Entity, SceneDocument, SceneSession, SceneSchedule, TransformSystem, RenderSystem
 ---
 
@@ -29,8 +29,12 @@ are the target shape; use the current compatibility API only where it exists tod
   create a second frame loop or `ComposeHost`.
 - Entities remain ECS data. Compose renders application UI around a supplied session or `World`;
   entities are not composables.
-- Keep systems and their main components together by capability. `SceneSchedule` chooses order;
-  it is not a home for rendering, physics, controls, or gameplay implementations.
+- In a scene module, keep a component, its binding and the system that applies it together. The
+  capability's own logic (a simulation, an algorithm, a behaviour) belongs in a module outside
+  `scene/` that depends on no `scene:*` module; the scene module wraps it, as `awake:scene:audio`
+  wraps `awake:core:audio`. The maintainer skill `awake-framework-boundary` has the rules.
+  `SceneSchedule` chooses order; it is not a home for rendering, physics, controls, or gameplay
+  implementations.
 
 ## Scene Content
 
