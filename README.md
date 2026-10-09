@@ -10,6 +10,8 @@ Core itself? Use [awake-agent-skills](https://github.com/awakekt/awake-agent-ski
 |---|---|---|
 | [awakekt/awake](https://github.com/awakekt/awake) | Public, Apache-2.0 | Awake Core: the engine runtime and the editor plugin contract |
 | [awakekt/awake-template](https://github.com/awakekt/awake-template) | Public | The starting project for a new game |
+| [awakekt/awake-plugin-template](https://github.com/awakekt/awake-plugin-template) | Public | The starting project for an editor plugin, built only on Core's plugin contract |
+| [awakekt/awake-project-template](https://github.com/awakekt/awake-project-template) | Public | The app that plays an Awake Studio project; Studio's app export is built on it |
 | awakekt/awake-studio | Private, AGPL-3.0 or commercial | Awake Studio: the editor app, its editor library and commercial plugins |
 | [awakekt/awake-agent-skills](https://github.com/awakekt/awake-agent-skills) | Public, Apache-2.0 | Skills for maintaining Awake Core, maintainer personas, and the skill installer |
 | [awakekt/awake-game-agent-skills](https://github.com/awakekt/awake-game-agent-skills) | Public, Apache-2.0 | Skills for building games, tools and editor plugins on Awake |
@@ -21,7 +23,10 @@ Each project pins the bundles it needs in `.agents/skills.lock.toml`:
 |---|---|
 | awake | agent skills, game skills |
 | awake-studio | agent skills, game skills, studio skills |
-| awake-template and new games | game skills |
+
+The starter templates (awake-template, awake-project-template and awake-plugin-template) ship no
+agent setup: their files land in every project made from them. A game, tool or plugin project
+that wants the game skills pins awake-game-agent-skills itself.
 
 ## Skills
 
