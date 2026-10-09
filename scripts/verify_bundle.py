@@ -128,6 +128,23 @@ def validate_personas(config: dict, errors: list[str]) -> int:
     return len(personas)
 
 
+def validate_layout(config: dict, errors: list[str]) -> None:
+    """Personas and commands sit beside skills/: a skill's own agents/ holds only Codex metadata."""
+    for path in sorted(SKILLS.glob("*/agents/*.md")):
+        errors.append(f"{path.relative_to(ROOT).as_posix()}: personas live in {config.get('persona_dir', 'agents')}/, not inside a skill")
+    for path in sorted(SKILLS.glob("*/commands")):
+        errors.append(f"{path.relative_to(ROOT).as_posix()}: commands live in {config.get('command_dir', 'commands')}/, not inside a skill")
+
+
+def validate_commands(config: dict, errors: list[str]) -> int:
+    if not config.get("command_dir"):
+        return 0
+    commands = sorted((ROOT / config["command_dir"]).glob("*.md"))
+    for path in commands:
+        validate_links(path, path.read_text(encoding="utf-8"), errors)
+    return len(commands)
+
+
 def validate_readme(names: list[str], errors: list[str]) -> None:
     readme = ROOT / "README.md"
     listed = re.findall(r"(?m)^\| `([a-z0-9-]+)` \|", readme.read_text(encoding="utf-8")) if readme.is_file() else []
@@ -142,16 +159,22 @@ def main() -> int:
     config = tomllib.loads((ROOT / "bundle.toml").read_text(encoding="utf-8"))
     errors: list[str] = []
     names = [validate_skill(path, config, errors) for path in sorted(SKILLS.glob("*/SKILL.md"))]
-    for path in sorted(SKILLS.rglob("*.md")):
+    deployed = sorted(SKILLS.rglob("*.md"))
+    for key in ("persona_dir", "command_dir"):
+        if config.get(key):
+            deployed += sorted((ROOT / config[key]).glob("*.md"))
+    for path in deployed:
         text = path.read_text(encoding="utf-8")
         if ".agents/" in text or "~/.agents" in text or "file://" in text:
             errors.append(f"{path.relative_to(ROOT)}: references a deployment or local-machine path")
+    validate_layout(config, errors)
     persona_count = validate_personas(config, errors)
+    command_count = validate_commands(config, errors)
     validate_readme([name for name in names if name], errors)
     if errors:
         print(f"{config['name']} verification failed:", *errors, sep="\n", file=sys.stderr)
         return 1
-    print(f"{config['name']} verification passed ({len(names)} skills, {persona_count} personas)")
+    print(f"{config['name']} verification passed ({len(names)} skills, {persona_count} personas, {command_count} commands)")
     return 0
 
 
