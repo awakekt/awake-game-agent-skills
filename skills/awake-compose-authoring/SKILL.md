@@ -122,34 +122,34 @@ multiple regions use named slots; add a scoped receiver only when callers genuin
 layout scope. Do not add text/icon/loading/position parameters that duplicate a caller-owned slot.
 Use a composition local instead of a slot only for deep, cross-cutting UI context.
 
-### Where a `remember` lives, and which node claims it
+### Where a `remember` lives, and what keeps it in line
 
 `remember` stores its slots on the **nearest enclosing node** and indexes them by **call order**
-within that node. A `key(...)` gives a *node* its identity; it does not move a memo's slot. The two
-are separate mechanisms and a correct list needs both.
+within that node. A call that comes or goes partway through a node shifts the slots of every call
+after it. From Core 0.12.0 three things keep that from handing one call another's value:
 
-The rule that follows: **nothing may `remember` after a variable-length sequence in the same node.**
-Add or remove one item and every memo after it shifts by one.
+- **`key(value) { }`** keys the nodes its block declares *and* gives its `remember` calls a slot
+  group of their own, found by key. A keyed branch or list item keeps its state as it comes, goes or
+  moves, and the calls after it keep theirs. Key every branch that remembers and every item of a
+  list.
+- **`rememberGroup(key) { }`** does the same for a component's own state without touching node
+  identity. A component that remembers wraps its body in one, with a key private to it. It must not
+  use `key(...)` for this: that would replace the key its caller gave the node and break the
+  caller's keyed list.
+- **A value of another type** in a call's slot is recomputed rather than cast, so a shift no longer
+  throws a `ClassCastException`. It still loses that state.
 
-Two failure modes, and the quiet one is worse:
+What none of them catch: an **unkeyed** call that comes or goes beside another call of the **same
+type**. The state then silently belongs to the wrong call. The scene editor shipped this once: adding
+a component swapped which inspector section was open. So:
 
-- Same type on both sides -- two sections' expanded flags, say -- and the state silently belongs to
-  the wrong item. Nothing throws. The scene editor shipped this: adding a component swapped which
-  inspector section was open.
-- Different types, and it is a `ClassCastException` from the slot table, usually named after a class
-  with no obvious relationship to the panel you were editing.
+- Wrap a branch that remembers, and each item of a list, in `key(...)`.
+- Give a reusable component's state a `rememberGroup` of its own.
+- A conditional subtree with no `remember` in it is fine. It is the memo, not the node, that moves.
 
-What to do instead:
-
-- Give each repeated item **its own node** -- wrap its body in a `Column`/`Box` -- so its memos live
-  in that node rather than in the parent's list.
-- **And** key it, so an inserted sibling does not adopt the next node by position and read back its
-  remembered state.
-- Never make a subtree that remembers conditionally composed. An `if` around it shifts every slot
-  after it on the frame the branch flips. Draw the control always and disable it, or hoist the state
-  above the branch.
-
-A conditional subtree with no `remember` in it is fine. It is the memo, not the node, that moves.
+On Core 0.11.x and earlier, `key(...)` keys nodes only. There, give each repeated or conditional
+item its own keyed node (a `Column`/`Box`) so its memos live in that node, and never `remember`
+after a variable-length sequence in the same node.
 
 ## State placement guide
 
