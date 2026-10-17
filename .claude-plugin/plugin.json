@@ -1,0 +1,20 @@
+{
+  "name": "awake-game-agent-skills",
+  "version": "0.1.2",
+  "description": "Skills for building games, tools and editor plugins on Awake: ECS authoring, scene runtime, app composition, state management and the editor plugin contract.",
+  "author": {
+    "name": "Ron June Valdoz",
+    "url": "https://github.com/awakekt"
+  },
+  "homepage": "https://github.com/awakekt/awake-game-agent-skills",
+  "repository": "https://github.com/awakekt/awake-game-agent-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "awake",
+    "game-engine",
+    "ecs",
+    "editor-plugin",
+    "kotlin-multiplatform",
+    "agent-skills"
+  ]
+}

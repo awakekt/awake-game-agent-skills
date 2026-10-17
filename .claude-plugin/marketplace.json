@@ -1,0 +1,16 @@
+{
+  "name": "awake-game-agent-skills",
+  "description": "Skills for building games, tools and editor plugins on Awake: ECS authoring, scene runtime, app composition, state management and the editor plugin contract.",
+  "owner": {
+    "name": "Awake",
+    "url": "https://github.com/awakekt"
+  },
+  "plugins": [
+    {
+      "name": "awake-game-agent-skills",
+      "source": "./",
+      "description": "Skills for building games, tools and editor plugins on Awake: ECS authoring, scene runtime, app composition, state management and the editor plugin contract.",
+      "version": "0.1.2"
+    }
+  ]
+}
