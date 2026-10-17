@@ -47,6 +47,17 @@ that wants the game skills pins awake-game-agent-skills itself.
 | `awake-ui-layout-guidance` | Design and review retained Compose layouts in Awake when deciding between fixed and adaptive sizing, parent spacing, Spacer, arrangement, and alignment |
 | `awake-web-to-compose` | Port a website or raw HTML/CSS into Awake Compose |
 
+## Install in Claude Code
+
+Claude Code does not read `.agents/skills`. This repository is also a Claude Code plugin marketplace,
+so Claude Code loads its skills directly:
+
+    claude plugin marketplace add awakekt/awake-game-agent-skills
+    claude plugin install awake-game-agent-skills@awake-game-agent-skills
+
+Skills are namespaced by the plugin, for example `awake-game-agent-skills:<skill>`. Update with
+`claude plugin update awake-game-agent-skills@awake-game-agent-skills`.
+
 ## Install in a game project
 
 Add this bundle to the project's `.agents/skills.lock.toml`, then run the installer from
