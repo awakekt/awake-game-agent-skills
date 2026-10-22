@@ -35,13 +35,14 @@ that wants the game skills pins awake-game-agent-skills itself.
 | `awake-app-composition` | Compose an Awake application from engine:platform, engine:bootstrap, an optional Compose UI host, and SceneSession |
 | `awake-compose-authoring` | Author Compose-shaped UI on Awake's retained :awake:compose runtime |
 | `awake-core-math` | Rules for using Awake's `core.math` types (Vec3, Mat4, Camera) and for writing per-frame ECS systems without allocating |
-| `awake-ecs-authoring` | Rules for authoring Awake ECS components, systems and scenes - component construction, query/family costs, structural-change churn, entity lifecycle, and the scene DSL |
+| `awake-ecs-authoring` | Rules for authoring Awake ECS components, systems, `EcsTag` state markers, `AnimationCue`/`SoundCue` pipelines, and scenes |
 | `awake-ecs-scene-runtime` | Consume Awake ECS scenes from a game or sample: scene documents, entity content, scene sessions, scheduling, and lifecycle-safe activation |
 | `awake-editor-plugin-authoring` | Write an editor plugin for Awake Studio or any other Awake editor host against the public Apache contract com.awakekt.awake.editor:contract |
 | `awake-fbx-asset-cooking` | Convert FBX source assets, including Mixamo characters and clips, into Awake-compatible GLB assets |
+| `awake-net-authoring` | Author multiplayer game protocols, binary packets (`PacketFormat`, `PacketOpcodeRegistry`), Protobuf/JSON channels, and authoritative Ktor game servers (`GameServerHost`, `GameFeature`) |
 | `awake-render-debug-views` | Look inside an Awake 3D frame instead of guessing |
 | `awake-shadcn-recipe-consuming` | Consume Awake's in-repository shadcn design system from a sample, game, or application |
-| `awake-state-management` | Manage Awake application, editor, and sample state with a thin Store/Contract, MVI, or UDF shape |
+| `awake-state-management` | Manage Awake application, editor, sample, and in-game HUD state with a thin Store/Contract, MVI, or UDF shape |
 | `awake-terrain-authoring` | Author Awake heightmaps, dynamic terrain edits, geometry clipmaps, texture splatting, and terrain collision composition |
 | `awake-ui-design-audit` | Audit or remediate an Awake Compose screen, screenshot, or web reference for hierarchy, content density, design-system consistency, theme handling, responsive behavior, accessibility, and visual quality |
 | `awake-ui-layout-guidance` | Design and review retained Compose layouts in Awake when deciding between fixed and adaptive sizing, parent spacing, Spacer, arrangement, and alignment |

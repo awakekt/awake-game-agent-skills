@@ -1,6 +1,13 @@
 ---
 name: awake-ecs-authoring
-description: Rules for authoring Awake ECS components, systems and scenes - component construction, query/family costs, structural-change churn, entity lifecycle, and the scene DSL. Read before adding a component, writing a System, or building entities with the scene { } DSL. Trigger keywords - ECS, World, entity, component, System.update, queryEach, family, Poolable, scene DSL, EntityScope, cameraEntity, MeshRenderer, Transform, spawn, destroy.
+description: >
+  Rules for authoring Awake ECS components, systems, gameplay cues, and scenes - component
+  decomposition, EcsTag state markers, AnimationCue/SoundCue pipelines, query/family costs,
+  structural-change churn, entity lifecycle, and the scene DSL. Read before adding a component,
+  writing a System, triggering animation/sound, or building entities with the scene { } DSL.
+  Trigger keywords - ECS, World, entity, component, System.update, queryEach, family, Poolable,
+  EcsTag, AnimationCue, SoundCue, AudioSystem, scene DSL, EntityScope, cameraEntity, MeshRenderer,
+  Transform, spawn, destroy.
 license: Apache-2.0
 metadata:
   author: awake
@@ -9,11 +16,12 @@ metadata:
 
 # Authoring ECS components, systems and scenes in Awake
 
-Pairs with `awake-core-math`, which owns the vector/matrix and per-frame allocation rules.
+Pairs with `awake-core-math` (vector/matrix and per-frame allocation rules) and
+`awake-state-management` (in-game HUD and editor Store/Contract separation).
 
 ## Components
 
-A component is plain data. Behaviour lives in a `System`.
+A component is plain data with a single responsibility. Behaviour lives in a `System`.
 
 ```kotlin
 class MovementControl : Poolable {
@@ -78,6 +86,35 @@ The ECS `World` is the **Single Source of Truth** for both runtime simulation an
    - Compose UI panels and inspector state holders (`*InspectorState`) are pure observers and controllers.
    - **Never store canonical domain or tool state in UI-only memory.** UI state must synchronize with the entity's ECS components in the `World` immediately on interaction.
 
+## Gameplay state, animation, and audio cues
+
+Read [gameplay-cues-and-state.md](references/gameplay-cues-and-state.md) before writing gameplay
+components, combat/skill state transitions, animation systems, or audio triggers.
+
+1. **No God-Components or God-Systems**:
+   - Never pack stats, health, cooldowns, bitflags, hit lists, boolean animation flags, and UI
+     request queues into one `Combatant` or `PlayerState` class. Split into orthogonal data
+     components (`Health`, `CombatStats`, `CombatTarget`) and `EcsTag` state markers (`Dead`,
+     `Stunned`, `InCombat`) so `family`/`queryEach` filters at the storage level instead of running
+     deep `if/else` chains.
+   - Never keep 10+ `HashMap<Entity, ...>` side tables inside a single 700-line `System` (such as a
+     monolithic `NetClientSystem`). Store per-entity state on an ECS component and split independent
+     responsibilities into separate systems.
+2. **Trigger animations and audio via typed one-shot Cues (`AnimationCue`, `SoundCue`)**:
+   - Never poll and clear boolean flags (`attackAnimationPending = false`) on domain components.
+   - Never diff domain state (`count > prevInventoryCount || currency > prevCurrency` or
+     `attackSequences: HashMap<Entity, Long>`) inside `GameAudioSystem` to guess what happened.
+   - Emit sealed `AnimationCue` and `SoundCue` events at the authoritative transition site (loot
+     collected, strike landed, skill cast) and drain them once per frame in presentation systems.
+3. **Declarative Animation Priority Table, never component stashing**:
+   - Never rip `LocomotionAnimation` off an entity and stash it in a system's
+     `HashMap<Entity, LocomotionAnimation?>` when an entity dies.
+   - Resolve clips in a single `AnimationCueSystem` using a priority table (`DEATH > SKILL_CAST >
+     ATTACK > HIT_REACT > LOCOMOTION`) instead of scattered string-prefix `if/else` checks.
+4. **Use `:awake:scene:audio` (`AudioSystem`, `AudioSource`, `AudioListener`)**:
+   - Use Awake's built-in `AudioSystem` for 3D spatial attenuation and stereo panning, paired with a
+     lightweight `SoundCueSystem` for one-shot gameplay SFX.
+
 ## Systems
 
 ```kotlin
@@ -134,7 +171,8 @@ previouslyActive.forEach { world.remove<ActiveCamera>(it) }
 ```
 
 **Registration order is behaviour.** Systems run in registration order within a phase. Input
-must precede intent consumers; the camera pose must be settled before anything reads its basis.
+must precede intent consumers; the camera pose must be settled before anything reads its basis;
+gameplay systems that emit `AnimationCue` / `SoundCue` must precede the cue drain systems.
 If a system reads another's output, say so in a comment at the registration site.
 
 ## Scenes and entities
@@ -187,13 +225,14 @@ through to whatever outer extension does match.
 ## Checklist
 
 - [ ] `reset()` clears every field of the component, flags included.
-- [ ] Payload-free marker components are singleton objects implementing `EcsTag`.
+- [ ] Components are single-purpose data; discrete states use `EcsTag` singletons instead of god-component `if/else` trees.
+- [ ] Animations and sounds are triggered by typed one-shot cues (`AnimationCue`, `SoundCue`), never by boolean flag polling or diffing domain counts in `HashMap`s.
+- [ ] Animation playback uses a priority table in one system; removed components (`LocomotionAnimation`) are never stashed in a system `HashMap`.
+- [ ] Spatial audio uses `:awake:scene:audio` (`AudioSystem`, `AudioSource`, `AudioListener`).
 - [ ] Hot tag-family code uses iteration or `componentAt`, not a materialized `components*()` array.
 - [ ] No reflective `world.add<T>(entity)` - factory or instance passed explicitly.
-- [ ] No per-frame add/remove of the same component.
-- [ ] No structural mutation during `queryEach` iteration.
+- [ ] No per-frame add/remove of the same component, and no structural mutation during `queryEach`.
 - [ ] Camera entities carry both `Camera` and `CameraComponent`.
 - [ ] Teardown destroys only entities this feature spawned, plus its GPU resources.
 - [ ] Editor tool parameters and asset references live in ECS components on the entity, never in UI-only memory.
 - [ ] New nested DSL receivers are `@DslMarker`-annotated.
-- [ ] ECS storage changes include matched ordinary/tag benchmarks, GC evidence, and all-target tests.
