@@ -39,6 +39,7 @@ that wants the game skills pins awake-game-agent-skills itself.
 | `awake-ecs-scene-runtime` | Consume Awake ECS scenes from a game or sample: scene documents, entity content, scene sessions, scheduling, and lifecycle-safe activation |
 | `awake-editor-plugin-authoring` | Write an editor plugin for Awake Studio or any other Awake editor host against the public Apache contract com.awakekt.awake.editor:contract |
 | `awake-fbx-asset-cooking` | Convert FBX source assets, including Mixamo characters and clips, into Awake-compatible GLB assets |
+| `awake-net-authoring` | Author multiplayer game protocols, binary packets (`PacketFormat`, `PacketOpcodeRegistry`), Protobuf/JSON channels, and authoritative Ktor game servers (`GameServerHost`, `GameFeature`) |
 | `awake-render-debug-views` | Look inside an Awake 3D frame instead of guessing |
 | `awake-shadcn-recipe-consuming` | Consume Awake's in-repository shadcn design system from a sample, game, or application |
 | `awake-state-management` | Manage Awake application, editor, and sample state with a thin Store/Contract, MVI, or UDF shape |
