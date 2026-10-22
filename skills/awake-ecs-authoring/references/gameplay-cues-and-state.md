@@ -192,13 +192,31 @@ frame hitches, or mid-cast interrupts (stun/death) immediately desync coroutine 
 rendered bone pose.
 
 ### Rules for frame-accurate audio-animation sync
-1. **3-Phase Action Lifecycle (`OnStart` → `OnHold` → `OnRelease` / `OnCancel`)**:
-   - **`OnStart` (Windup clip, `Once`)**: Plays the opening animation clip and emits `SoundCue.CastStart`.
-   - **`OnHold` (Channeling loop clip, `Loop`)**: Entered when `OnStart` finishes while `skillCasting == true`.
-     Emits `SoundCue.StartHoldLoop` so `AudioSystem` starts a looping `SoundHandle` tracked per
-     entity.
-   - **`OnRelease` / `OnCancel` (Release clip or Death/Stun interrupt)**: Emits `SoundCue.StopHoldLoop`
-     (which calls `handle.stop()` on the active hold loop) before playing the release SFX.
+1. **3-Phase Action Lifecycle (`OnStart` → `OnHold` → `OnRelease` / `OnCancel`) on ECS Components**:
+   - Store `ActionPhase` (`IDLE`, `ON_START`, `ON_HOLD`, `ON_RELEASE`, `DEAD`), playhead tracking (`lastObservedClipId`, `lastObservedClipTime`), and active looping `SoundHandle?` directly on the entity's ECS components—never in `HashMap<Entity, ...>` side tables inside a `System`.
+   - **`OnStart` (Windup clip, `Once`)**: Sets `actionPhase = ActionPhase.ON_START`, plays the opening animation clip, and emits `SoundCue.CastStart`.
+   - **`OnHold` (Channeling loop clip, `Loop`)**: Entered when `OnStart` finishes while `skillCasting == true`. Sets `actionPhase = ActionPhase.ON_HOLD`, plays the looping hold clip, and emits `SoundCue.CastHoldStart` so `AudioSystem` starts a looping `SoundHandle` stored on the entity's `AudioCues.activeHoldSound`.
+   - **`OnRelease` / `OnCancel` (Release clip or Death/Stun interrupt)**: Emits `SoundCue.CastHoldStop` (which calls `activeHoldSound?.stop()` and clears the handle on the entity's `AudioCues`) before playing the release SFX (`SoundCue.CastRelease`).
+
+```kotlin
+enum class ActionPhase { IDLE, ON_START, ON_HOLD, ON_RELEASE, DEAD }
+
+class AudioCues : Poolable {
+    val pending = ArrayDeque<SoundCue>()
+    var activeHoldSound: SoundHandle? = null
+
+    fun stopHoldSound() {
+        activeHoldSound?.stop()
+        activeHoldSound = null
+    }
+
+    override fun reset() {
+        pending.clear()
+        stopHoldSound()
+    }
+}
+```
+
 2. **Timeline Keyframe Marker Crossing `(prevTime, currTime]`**:
    - Sub-clip events (melee whoosh at `t = 0.18s`, impact at `t = 0.36s`, left/right footsteps at
      `25%` and `75%` of `walk`/`run` clip duration) must be triggered when the `AnimationPlayer`'s
