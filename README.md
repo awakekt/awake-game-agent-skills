@@ -33,6 +33,7 @@ that wants the game skills pins awake-game-agent-skills itself.
 | Skill | Use it for |
 |---|---|
 | `awake-app-composition` | Compose an Awake application from engine:platform, engine:bootstrap, an optional Compose UI host, and SceneSession |
+| `awake-audio-verification` | Verify game audio assets (`earshot` CLAP/Whisper/LUFS/loop-seam checks) and deterministic ECS audio cue/phase synchronization (`SoundCue`, `OnStart`/`OnHold`/`OnRelease`, timeline markers) |
 | `awake-compose-authoring` | Author Compose-shaped UI on Awake's retained :awake:compose runtime |
 | `awake-core-math` | Rules for using Awake's `core.math` types (Vec3, Mat4, Camera) and for writing per-frame ECS systems without allocating |
 | `awake-ecs-authoring` | Rules for authoring Awake ECS components, systems, `EcsTag` state markers, `AnimationCue`/`SoundCue` pipelines, and scenes |

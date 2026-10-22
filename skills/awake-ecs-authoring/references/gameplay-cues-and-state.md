@@ -244,4 +244,7 @@ fun crossedMarker(
    Run `GameplaySystems` → `AnimationSystem` (advances playhead, transitions `OnStart`/`OnHold`/`OnRelease`,
    and emits `SoundCue`s on marker crossings) → `AudioSystem` (drains `SoundCue`s in the same frame
    with zero-frame latency).
-
+4. **Headless Audio & Cue Verification**:
+   Verify ECS cue emission, CastHoldStop interrupt safety, normalized marker crossings, and
+   .ogg/.wav asset quality (earshot CLAP/Whisper/LUFS/loop-seam checks) using
+   [awake-audio-verification](../../awake-audio-verification/SKILL.md).
