@@ -1,20 +1,21 @@
 ---
 name: awake-state-management
 description: >
-  Manage Awake application, editor, and sample state with a thin Store/Contract, MVI, or UDF shape.
-  Use before adding state, intents, effects, reducers, StateFlow, or effect draining outside ECS.
-  It keeps frame-loop effects synchronous and separates simulation, document, session, and widget state.
+  Manage Awake application, editor, sample, and in-game HUD state with a thin Store/Contract, MVI,
+  or UDF shape. Use before adding state, intents, effects, reducers, StateFlow, HUD windows, or
+  effect draining outside ECS. It keeps frame-loop effects synchronous and separates simulation,
+  document, session, HUD window, and widget state.
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-08-25'
-  keywords: Awake state, MVI, Store, Contract, Intent, Effect, StateFlow, reducer, effect draining, editor state
+  last-updated: '2026-09-17'
+  keywords: Awake state, MVI, Store, Contract, Intent, Effect, StateFlow, reducer, effect draining, editor state, game HUD, window state
 ---
 
 # Awake State Management
 
-This skill governs application, editor, and sample state. It does not replace ECS state or turn
-engine modules into app architecture. Read [the app-composition skill](../awake-app-composition/SKILL.md)
+This skill governs application, editor, sample, and in-game HUD state. It does not replace ECS
+state or turn engine modules into app architecture. Read [the app-composition skill](../awake-app-composition/SKILL.md)
 for lifecycle ownership and [the Compose-authoring skill](../awake-compose-authoring/SKILL.md) when
 retained Compose renders the state.
 
@@ -25,6 +26,7 @@ retained Compose renders the state.
 | Simulation that ticks, collides, renders, or replicates | ECS components and systems |
 | Authored scene/provider configuration that must save | `SceneDocument` and versioned provider payload |
 | Entity authoring tool state (brush size, dynamics, layers, companion asset paths) | Ephemeral ECS capability component on the entity (`*BrushComponent`, `*AssetReference`) |
+| In-game HUD window or feature state (inventory, taskbar, party, quest, dialog, chat) | Cohesive per-feature Store/Contract (`*Contract` / `*Store`) synced at a single frame boundary |
 | Session/editor mode, selection, panel layout, async progress, or user action state | Explicit Store/Contract or a thin state holder |
 | A shared UI value with no asynchronous work (active tab, picker visibility) | Hoist to the lowest shared UI owner; use explicit state/events |
 | A private transient widget detail | `remember` in the retained node |
@@ -82,6 +84,52 @@ An asynchronous effect handler starts work outside the frame thread and dispatch
 when it completes. Do not make a later Compose pass responsible for collecting, replaying, or
 acknowledging that effect.
 
+## In-game HUD and gameplay windows (ECS ↔ Store ↔ View)
+
+Game HUDs (inventory, taskbar, skill tree, quest log, party, guild, chat, NPC dialog) follow the
+exact same Store/Contract separation whether rendered via retained Compose (`:awake:compose`) or
+`SceneCanvasElement` nodes:
+
+1. **Never create a "kitchen-sink" `PlayerState` ECS component.** Dumping open window sets, hover
+   tooltips, chat logs, party/trade/guild views, taskbar shortcuts, and outgoing UI request lists
+   into one mutable component on the player entity couples every window to every gameplay system.
+2. **Never write 500+ line imperative `WindowSystem : System` classes** that mix AABB pointer
+   hit-testing (`contains(mouse)`), business rules, domain mutation, and direct `CanvasElement` /
+   `CanvasText` node mutation inside `update(world, delta)`.
+3. **Split each HUD feature into three focused parts**:
+   - **Contract & Store (`TaskbarContract` / `TaskbarStore`)**: Pure immutable `State`, sealed
+     `Intent` (`WorldSynced`, `SlotActivated`, `ShortcutAssigned`, `SubTabSelected`), and sealed
+     `Effect` (`UseInventorySlot`, `CastSkill`, `PlayUiSound`). Unit-tested on plain JVM with zero
+     ECS or renderer setup.
+   - **Pure View / Presenter**: Reads `State` to render Compose widgets or update `CanvasElement`
+     properties, and maps pointer/keyboard input into `store.dispatch(Intent)`. Zero domain or
+     network mutation inside the view.
+   - **Thin ECS Bridge (`HudSyncSystem`)**: At the start of the HUD frame phase, projects ECS data
+     (`Health`, `Inventory`, `SkillBook`) into `store.dispatch(Intent.WorldSynced(...))`. At the
+     end of the phase, drains `store.drainEffects()` into focused ECS command components or network
+     packets.
+
+```kotlin
+object TaskbarContract {
+    data class State(
+        val hpRatio: Float = 1f,
+        val activePage: Int = 0,
+        val slots: List<ShortcutSlotUi> = emptyList(),
+    )
+
+    sealed interface Intent {
+        data class WorldSynced(val hpRatio: Float, val slots: List<ShortcutSlotUi>) : Intent
+        data class ActivateSlot(val index: Int) : Intent
+        data class SelectPage(val page: Int) : Intent
+    }
+
+    sealed interface Effect {
+        data class ExecuteShortcut(val slotId: String) : Effect
+        data object PlayClickSound : Effect
+    }
+}
+```
+
 ## Frame and lifecycle rules
 
 - Drain queued effects at one named application/session boundary, once per frame. An effect is
@@ -108,6 +156,8 @@ acknowledging that effect.
 
 - State is in the correct layer: ECS, document, Store/session, hoisted UI, or local `remember`.
 - State holds immutable data and stable IDs, not engine resources or live ECS objects.
+- In-game HUD windows use cohesive per-feature Contracts/Stores—not a monolithic `PlayerState`
+  component or imperative `System` loops that mix hit-testing, business rules, and node mutation.
 - Intent handling is the only Store mutation path; reducers have no engine or IO side effects.
 - Effects are queued, drained synchronously once, and tested as one-shot work.
 - A retained Compose consumer pulls a state snapshot and dispatches intents; it does not use
