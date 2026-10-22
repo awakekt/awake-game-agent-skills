@@ -192,14 +192,27 @@ frame hitches, or mid-cast interrupts (stun/death) immediately desync coroutine 
 rendered bone pose.
 
 ### Rules for frame-accurate audio-animation sync
-1. **3-Phase Action Lifecycle (`OnStart` → `OnHold` → `OnRelease` / `OnCancel`) on ECS Components**:
-   - Store `ActionPhase` (`IDLE`, `ON_START`, `ON_HOLD`, `ON_RELEASE`, `DEAD`), playhead tracking (`lastObservedClipId`, `lastObservedClipTime`), and active looping `SoundHandle?` directly on the entity's ECS components—never in `HashMap<Entity, ...>` side tables inside a `System`.
-   - **`OnStart` (Windup clip, `Once`)**: Sets `actionPhase = ActionPhase.ON_START`, plays the opening animation clip, and emits `SoundCue.CastStart`.
-   - **`OnHold` (Channeling loop clip, `Loop`)**: Entered when `OnStart` finishes while `skillCasting == true`. Sets `actionPhase = ActionPhase.ON_HOLD`, plays the looping hold clip, and emits `SoundCue.CastHoldStart` so `AudioSystem` starts a looping `SoundHandle` stored on the entity's `AudioCues.activeHoldSound`.
-   - **`OnRelease` / `OnCancel` (Release clip or Death/Stun interrupt)**: Emits `SoundCue.CastHoldStop` (which calls `activeHoldSound?.stop()` and clears the handle on the entity's `AudioCues`) before playing the release SFX (`SoundCue.CastRelease`).
+1. **Drive the 3-Phase Action Lifecycle (`OnStart` → `OnHold` → `OnRelease` / `Dead`) with `:awake:ai` `AiStateMachine`**:
+   - Do not scatter `if (combatant.actionPhase == ON_HOLD) emitSound(CastHoldStop)` across six `when` branches. Instead, attach an `:awake:ai` `AiStateMachine` (`AiState` with `onEnter`, `onUpdate`, `onExit` + declarative `StateTransition` table) to the ECS component.
+   - Store stateless `AiState` singletons and the `StateTransition` map once in a companion/object (`CombatActionFsm`), and reuse a single `AiContext` in the driver system for zero per-frame allocations.
+   - **`OnStart` (`AiState.onEnter`)**: Resets playhead watermarks (`lastObservedClipTime = 0f`), plays the opening wind-up clip (`Once`), and emits `SoundCue.CastStart`.
+   - **`OnHold` (`AiState.onEnter` & `AiState.onExit`)**: Entered via a declarative `StateTransition` when `OnStart` finishes while `skillCasting == true` (or via explicit `SkillHold` cue). `onEnter` starts the looping hold animation and emits `SoundCue.CastHoldStart`; **`onExit` unconditionally emits `SoundCue.CastHoldStop`** so leaving `ON_HOLD` for *any* reason (`SkillRelease`, `SkillCancel`, `Attack`, `Death`, or cast completion) automatically stops the looping `SoundHandle`!
+   - **`OnRelease` (`AiState.onEnter`)**: Plays the release clip (`Once`) and emits `SoundCue.CastRelease` (which runs *after* `OnHold.onExit` emits `CastHoldStop`).
 
 ```kotlin
 enum class ActionPhase { IDLE, ON_START, ON_HOLD, ON_RELEASE, DEAD }
+
+// Shared stateless AiState singletons + transition table in :awake:ai
+private val onHoldState = object : AiState(ActionPhase.ON_HOLD.name) {
+    override fun onEnter(context: AiContext) {
+        context.world.emitSound(context.entity, SoundCue.CastHoldStart)
+    }
+
+    override fun onExit(context: AiContext) {
+        // Guaranteed cleanup on ANY transition out of ON_HOLD (Release, Cancel, Attack, or Death)
+        context.world.emitSound(context.entity, SoundCue.CastHoldStop)
+    }
+}
 
 class AudioCues : Poolable {
     val pending = ArrayDeque<SoundCue>()
@@ -241,7 +254,15 @@ fun crossedMarker(
 ```
 
 3. **Same-Frame ECS Schedule Order**:
-   Run `GameplaySystems` → `AnimationSystem` (advances playhead, transitions `OnStart`/`OnHold`/`OnRelease`,
+   Run `GameplaySystems` → `AnimationSystem` (advances playhead, updates `AiStateMachine`,
    and emits `SoundCue`s on marker crossings) → `AudioSystem` (drains `SoundCue`s in the same frame
    with zero-frame latency).
+
+4. **Agent Audio Verification (`earshot` CLI / MCP)**:
+   - When tuning procedural `SoundSynthesizer` clips or auditing animation-to-audio timeline sync
+     headlessly, agents can pair `:awake:core:audio` WAV output with the open-source MIT
+     [`earshot`](https://github.com/Leonxlnx/earshot) tool (`earshot measure` for LUFS/true-peak/clipping,
+     `earshot sheet` for annotated waveform/spectrogram PNGs, and `earshot timeline` for cue-frame alignment).
+   - Keep generic audio verification workflows in public skills; keep studio-specific `earshot profile`
+     reference scorecards and custom signature `earshot forge` / `fit` DSP recipes in the private game repository.
 
