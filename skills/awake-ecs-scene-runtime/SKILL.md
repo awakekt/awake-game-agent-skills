@@ -7,7 +7,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-10-05'
+  last-updated: '2026-10-26'
   keywords: Awake, ECS, World, Entity, SceneDocument, SceneSession, SceneSchedule, TransformSystem, RenderSystem
 ---
 
@@ -89,3 +89,4 @@ loop and one Compose host.
 - App root, Platform, Bootstrap, and Compose host ownership: `awake-app-composition`.
 - Render pipeline or backend resources: the render-pipeline and backend skills.
 - Game/private-pack versus public framework scope: `awake-framework-boundary`.
+- Canvas prefabs bound at runtime (HUD widgets, windows): `awake-canvas-binding`.

@@ -8,7 +8,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-09-17'
+  last-updated: '2026-10-26'
   keywords: Awake state, MVI, Store, Contract, Intent, Effect, StateFlow, reducer, effect draining, editor state, game HUD, window state
 ---
 
@@ -103,7 +103,8 @@ exact same Store/Contract separation whether rendered via retained Compose (`:aw
      ECS or renderer setup.
    - **Pure View / Presenter**: Reads `State` to render Compose widgets or update `CanvasElement`
      properties, and maps pointer/keyboard input into `store.dispatch(Intent)`. Zero domain or
-     network mutation inside the view.
+     network mutation inside the view. For canvas views, refer to parts through typed handles
+     declared once and resolved once, never string ids: see `awake-canvas-binding`.
    - **Thin ECS Bridge (`HudSyncSystem`)**: At the start of the HUD frame phase, projects ECS data
      (`Health`, `Inventory`, `SkillBook`) into `store.dispatch(Intent.WorldSynced(...))`. At the
      end of the phase, drains `store.drainEffects()` into focused ECS command components or network
