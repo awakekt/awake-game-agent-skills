@@ -2,13 +2,14 @@
 name: awake-compose-authoring
 description: >
   Author Compose-shaped UI on Awake's retained :awake:compose runtime. Use before adding or changing
-  Compose UI in an editor, tool, sample, app, or in-game screen UI, and before choosing CompositionLocal, slots,
-  remembered state, or a state boundary. It prevents upstream Compose APIs from being assumed here.
+  Compose UI in an editor, tool, sample, app, or in-game screen UI, before nesting Compose UI in a canvas
+  element with compose { }, and before choosing CompositionLocal, slots, remembered state, or a state
+  boundary. It prevents upstream Compose APIs from being assumed here.
 license: Apache-2.0
 metadata:
   author: awake
   last-updated: '2026-11-07'
-  keywords: Awake Compose, Composer, CompositionLocal, CompositionLocalProvider, slot API, state hoisting, remember, editor UI, SubcomposeLayout, zIndex, drawWithCache, nestedScroll
+  keywords: Awake Compose, Composer, CompositionLocal, CompositionLocalProvider, slot API, state hoisting, remember, editor UI, SubcomposeLayout, zIndex, drawWithCache, nestedScroll, nested compose, canvas element, SceneCanvas, canvasContent
 ---
 
 # Awake Compose Authoring
@@ -33,9 +34,10 @@ Then read the focused references below when their decision is involved:
 | A deliberate API divergence | [`11-refinements.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/11-refinements.md) and [`15-compose-parity.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/15-compose-parity.md) |
 | Before building a new draw primitive, `DrawScope` method, or modifier capability | [`15-compose-parity.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/15-compose-parity.md) (what's already **Built** vs a real **Gap**), [`11-refinements.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/11-refinements.md) (whether a divergence has the evidence to be legitimate), and [`10-graphics-layer.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/10-graphics-layer.md) (what's a known, documented non-fixed limitation rather than an oversight) — check all three before designing something new. |
 
-For in-game UI, decide canvas or Compose first with `awake-canvas-binding`: screen-space UI driven
-by game state (windows, dialogs, party frames, skill bar, chat) is Compose and draws over
-`SceneCanvas(world)` in the same host; world-anchored UI stays on the canvas.
+For in-game UI, decide canvas or Compose first with `awake-canvas-binding`: a HUD whose elements
+follow game state (party frames, skill bar, buffs) is canvas content, and world-anchored UI stays on
+the canvas. Windows, dialogs, chat and menus are Compose and draw over `SceneCanvas(world)` in the
+same host. Compose UI inside one canvas element is nested `compose { }` (below).
 For application-root, scene-session, or `ComposeHost` work, also use `awake-app-composition`.
 For Store/Contract, intents, effects, or application/editor state, also use
 `awake-state-management`.
@@ -153,6 +155,41 @@ a component swapped which inspector section was open. So:
 On Core 0.11.x and earlier, `key(...)` keys nodes only. There, give each repeated or conditional
 item its own keyed node (a `Column`/`Box`) so its memos live in that node, and never `remember`
 after a variable-length sequence in the same node.
+
+## Compose inside a canvas element: `compose { }`
+
+`compose { }` (`CanvasContentCompose.kt` in `:awake:scene:canvas`) draws ordinary Compose UI in the
+box of a canvas element. Call it in an element's content, inside `canvasContent`:
+
+```kotlin
+data class PartyState(val names: List<String>)
+
+context(_: Composer)
+fun PartyFrames(party: PartyState) { /* ordinary Compose UI: Column, LazyColumn, Text, ... */ }
+
+canvasContent(world, root = hudRoot, state = partyState) { party ->
+    panel(id = "party", settings = { size(240.dp, 120.dp) }) {
+        compose { PartyFrames(party) }
+    }
+}
+```
+
+Use it when one part of in-game canvas UI needs Compose behaviour the canvas lacks, such as a
+scrolling list or a text field, and must keep the element's place: its canvas order, alpha and
+follow position. Use a separate Compose window over `SceneCanvas(world)` for a whole window,
+dialog, chat or menu that is laid out on the screen, not on the canvas.
+
+Its limits:
+- It is composed within the `SceneCanvas` composition, where the canvas draws the element, keyed to
+  that element. It shows only where `SceneCanvas(world)` draws the canvas.
+- Compose layout applies inside the element's box only. The canvas places and sizes the element.
+- It draws under the element's own children. The pointer reaches it through the canvas's hit
+  testing, so an element drawn over it takes a tap first.
+- It reads the block's state as a closure, so it sees a new value only after the canvas content
+  recomposes: when its `StateFlow` emits, or on `CanvasContent.recompose()`. Its own `remember`
+  lives as long as the element, and the locals open around `compose { }` are provided over the
+  canvas's.
+- Called outside an element's content, it throws.
 
 ## State placement guide
 
