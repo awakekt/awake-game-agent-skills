@@ -1,0 +1,22 @@
+# Names a skill mentions on purpose that Awake Core doesn't declare: Kotlin and Java standard library,
+# kotlinx, AndroidX/Jetpack Compose (named to say Awake differs), Ktor, and native graphics APIs.
+# check_code_references.py skips them. Anything else missing from Core is drift: fix the skill.
+ClassCastException
+HashMap
+Iterator
+ThreadMXBean
+StateFlow
+ProtoBuf
+ByteReadPacket
+ViewModel
+LaunchedEffect
+DisposableEffect
+GPUBuffer
+GPUCanvasContext
+GPUTexture
+VkDevice
+VkDeviceMemory
+VkInstance
+# Icon packs generated at build time by the icon-codegen plugin, so not in Core's sources.
+HeroIcons
+LucideIcons

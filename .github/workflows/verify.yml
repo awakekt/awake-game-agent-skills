@@ -1,0 +1,33 @@
+name: Verify
+
+# Checks the bundle on every change, and once a day against Awake Core's main branch: a skill goes stale
+# when Core moves or renames what it describes, so most drift arrives without any change to the skill.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: awakekt/awake
+          path: .core
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Bundle rules
+        run: python3 scripts/verify_bundle.py
+      - name: Core references
+        run: python3 scripts/check_code_references.py --core .core --ref HEAD .
