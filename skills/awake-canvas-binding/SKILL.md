@@ -1,15 +1,15 @@
 ---
 name: awake-canvas-binding
 description: >
-  Build Awake canvas prefabs (SceneCanvasElement trees) and update them at runtime without magic
-  string ids. Use before writing a reusable in-game widget (HUD bar, unit frame, window, overlay),
-  a binder that writes CanvasElement properties, or a names file of element ids; it keeps prefabs as
-  data while making parts typed, declared once, resolved once and bound from state.
+  Choose between the scene canvas and Compose for in-game UI, then build canvas prefabs
+  (SceneCanvasElement trees) and bind them at runtime through typed CanvasParts handles, never magic
+  string ids. Use before writing in-game UI (nameplate, world bar, HUD panel, window, overlay), a
+  binder that writes CanvasElement properties, or a names file of element ids.
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-10-26'
-  keywords: Awake, canvas, canvasPrefab, SceneCanvasElement, CanvasElement, findCanvasElement, element id, binder, HUD widget, typed handle, magic string
+  last-updated: '2026-11-07'
+  keywords: Awake, canvas, Compose, canvas or Compose, canvasPrefab, CanvasParts, CanvasWidgetParts, SceneCanvasElement, CanvasElement, nameplate, HUD widget, typed handle, magic string
 ---
 
 # Awake Canvas Binding
@@ -19,15 +19,27 @@ unit frames, windows, chat, overlays. It covers how code refers to the prefab's 
 state that drives them, read [awake-state-management](../awake-state-management/SKILL.md) (HUD
 section) first; for sizing and spacing, [awake-ui-layout-guidance](../awake-ui-layout-guidance/SKILL.md).
 
-## Canvas prefab or Compose?
+## Canvas or Compose?
 
-- **Canvas prefab** (`canvasPrefab { … }` producing `SceneCanvasElement` nodes): in-game UI that
-  must be **data**: saved with the scene, editable in an editor, themed from data, overridden by a
-  game without Kotlin, and cheap to update every frame (bars, cooldowns, floating numbers).
-- **Compose** (`:awake:compose`): application and tool UI around the game (menus, editors, launchers).
-  See [awake-compose-authoring](../awake-compose-authoring/SKILL.md).
+Decide by where the UI lives and what drives it, not by habit:
 
-Don't port a canvas widget to Compose to fix naming problems. Fix how code names its parts.
+| UI | Use | Why |
+|---|---|---|
+| Anchored to the world: nameplates, health bars over entities, floating damage text, target markers | **Canvas** | Elements are ECS entities: they follow entities, sort with the scene, bind to components (`CanvasBinding`), and stay cheap at hundreds of copies |
+| Laid out and themed by designers, saved with a scene, overridden from data | **Canvas** | A prefab is a `ScenePrefab` an editor opens and saves back unchanged |
+| Screen-space and driven by game state: windows, dialogs, party frames, skill bar, buffs, target frame, chat, quest tracker | **Compose** (`:awake:compose`) | UI is a function of state; lists and conditionals follow the state with no update code. See [awake-compose-authoring](../awake-compose-authoring/SKILL.md) |
+| Menus, editors, launchers, tools around the game | **Compose** | Application UI |
+
+- The two run in one Compose host: `SceneCanvas(world)` is a composable, so Compose UI declared after
+  it draws on top and shares state, drag and drop, and tooltips with it.
+- Don't keep a hidden canvas copy of a window that moved to Compose. Every canvas element costs a
+  little every frame, visible or not, and systems that keep copies hidden scan all of them.
+- Don't park a whole HUD theme as an invisible subtree. Build what is shown; drop what isn't.
+- A canvas control's custom slot (`slotContent`) can draw a composable inside a control the editor
+  placed. It is wired by name, so prefer Compose for screen UI written in code.
+- Declarative canvas content, with Compose nested inside canvas elements, is planned in
+  [awakekt/awake#1391](https://github.com/awakekt/awake/issues/1391). Don't write against it until it
+  ships.
 
 ## The anti-pattern: magic string ids
 
@@ -58,53 +70,47 @@ tags on Android. Those ecosystems moved to serialized references, ViewBinding an
 3. **Resolve** the handles once against the instantiated root, and fail fast on a missing part.
 4. **Bind** from a state object, writing through typed views and skipping unchanged values.
 
-Core is adding this to `scene:canvas` ([awakekt/awake#1082](https://github.com/awakekt/awake/issues/1082)).
-Until it ships, keep the same shape locally so you can move to Core's types with no redesign (property names below are the shape, not exact API; check `CanvasElement` before writing):
+Core's `CanvasParts` (`awake:scene:canvas`) is this pattern. A `CanvasWidgetParts` is the widget;
+each kind's function (`text`, `image`, `bar`, `sweep`, `button`, `panel`, `view`) declares a typed
+part, `group` and `list` nest them, and ids are composed from the declaration (`bar.slot-3.icon`):
 
 ```kotlin
-// 1. Declare: one place owns the ids ("bar.slot-3.icon")
-class SlotParts(val id: String) {
-    val icon = "$id.icon"
-    val cooldown = "$id.cooldown"
-    val count = "$id.count"
+// 1. Declare: one place owns the ids
+class SlotParts(scope: CanvasPartScope) : CanvasParts(scope) {
+    val button = button()            // "bar.slot-3"
+    val icon = image("icon")         // "bar.slot-3.icon"
+    val cooldown = sweep("cooldown")
+    val count = text("count")
 }
-class BarParts(val id: String, slots: Int) {
-    val slots = List(slots) { SlotParts("$id.slot-$it") }
+class ActionBarParts(slotCount: Int) : CanvasWidgetParts("bar") {
+    val frame = panel()
+    val slots = list("slot", slotCount) { SlotParts(it) }
 }
 
 // 2. Build from the handles
-fun barPrefab(theme: Theme, parts: BarParts) = canvasPrefab(guid = stableGuid(parts.id), name = parts.id, id = parts.id) {
-    for (slot in parts.slots) part(slot.id, CanvasElementKind.Panel) {
-        part(slot.icon, CanvasElementKind.Image) { size(theme.slot, theme.slot) }
-        part(slot.cooldown, CanvasElementKind.Panel) { /* meter look */ }
-        part(slot.count, CanvasElementKind.Text) { fontSize = theme.small }
+fun actionBar(parts: ActionBarParts) = canvasPrefab(guid = BAR_GUID, name = "Action Bar", root = parts.frame) {
+    for (slot in parts.slots) button(slot.button) {
+        image(slot.icon) { size(32.dp, 32.dp) }
+        sweep(slot.cooldown) { }
+        text(slot.count) { fontSize = 10.sp }
     }
 }
 
-// 3. Resolve once and fail fast; 4. bind from state
-class BarView(world: World, root: Entity, parts: BarParts) {
-    private class Slot(val icon: CanvasElement, val cooldown: CanvasElement, val count: CanvasElement)
-    private val slots = parts.slots.map { s ->
-        fun need(id: String) = world.findCanvasElement(root, id)?.let { world.get<CanvasElement>(it) }
-            ?: error("Canvas part missing: $id")
-        Slot(need(s.icon), need(s.cooldown), need(s.count))
-    }
-    private var last: BarState? = null
+// 3. Resolve once when placed: throws CanvasPartResolutionException naming each missing part
+val bar = ActionBarParts(slotCount = 10).resolve(world, root)
 
-    fun bind(state: BarState) {
-        if (state == last) return
-        state.slots.forEachIndexed { i, s ->
-            val view = slots[i]
-            if (view.icon.image != s.icon) view.icon.image = s.icon
-            view.count.text = s.count?.toString().orEmpty()
-        }
-        last = state
+// 4. Bind from state: typed fields on cached elements, no lookups, no strings
+fun bind(state: BarState) {
+    for (i in bar.slots.indices) {
+        val s = state.slots[i]
+        if (bar.slots[i].icon.image != s.icon) bar.slots[i].icon.image = s.icon
+        bar.slots[i].cooldown.value = s.cooldown
     }
 }
 ```
 
-With Core's API, the `SlotParts` strings become `CanvasPart<K>` handles (typed per element kind),
-and `need(...)` becomes `parts.resolve(world, root)`. The structure stays the same.
+A part whose shipped prefab already saves another id keeps it with `pinnedId`. See "Bind elements
+with typed handles" in Core's `website/docs/guides/game-ui.md`.
 
 ## Rules
 
