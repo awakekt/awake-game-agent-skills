@@ -85,15 +85,15 @@ fun partyHud(world: World, hudRoot: Entity, party: StateFlow<PartyState>): Canva
     }
 ```
 
-- **When it runs.** `CanvasContentSystem` reruns the block on a frame where its state holds a new
-  value, and on no other frame. The scene runtime's infrastructure systems include it. A host that
+- **When it runs.** `CanvasContentSystem` reruns the block on a frame where state its last pass
+  read has changed, and on no other frame. The scene runtime's infrastructure systems include it. A host that
   runs its own systems adds it ahead of `TransformSystem`.
 - **New value, new object.** The system compares references. Emit a new immutable state; mutating a
   list in place and emitting it again changes nothing.
-- **No read tracking yet.** It reruns when its `StateFlow` emits, or when the host calls
-  `CanvasContent.recompose()`. It does not rerun on `State` reads: `collectAsState()` in
-  `:awake:compose:state` is for Compose UI. For state that is neither a flow nor a store, use
-  `canvasContent(world, root) { … }` and call `recompose()` when it changes.
+- **What it follows.** Reads are tracked: the `StateFlow` or `Store` it was made from, any
+  `mutableStateOf` the block reads, and any flow read through `collectAsState()`
+  (`:awake:compose:state`). State read any other way, such as a plain `var`, is not seen: call
+  `CanvasContent.recompose()` when that changes.
 - **What it writes.** A pass writes only the settings that changed. A pass that declares what the
   last one did writes nothing. `CanvasContent.applier` counts `writes`, `created` and `destroyed`.
 - **Keys.** Wrap each list item in `key(item.id)`. A keyed item that moves keeps its entities; one
