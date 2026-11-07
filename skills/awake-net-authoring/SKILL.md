@@ -7,7 +7,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-10-22'
+  last-updated: '2026-11-07'
   keywords: Awake net, PacketFormat, PacketOpcodeRegistry, PacketWriter, PacketReader, Protobuf, GameServerHost, GameFeature, MessageRouter, NetId, NetViolation
 ---
 
@@ -102,19 +102,19 @@ fun decodeClient(reader: PacketReader): ClientMessage? {
 
 ## 4. Structure authoritative servers with `GameServerHost` and `GameFeature`
 
-Do not put WebSocket loops, tick loops, authentication, and gameplay handlers into a single monolithic `GameServer` class:
+Do not put WebSocket loops, tick loops, authentication, and gameplay handlers into one monolithic server class:
 
 1. **Install `GameTransport` and `GameServerHost`** (`:awake:net:server-ktor`) inside an extracted `Application.configureServerModule(...)` function so tests run through Ktor `testApplication` without binding TCP ports.
-2. **Decompose gameplay by domain into `GameFeature<C, S>` implementations** (`ChatFeature`, `PartyFeature`, `GuildFeature`, `CombatFeature`, `TradeFeature`), each registering its own message handlers on `MessageRouter`:
+2. **Decompose gameplay by domain into one `GameFeature<P, M>` per domain** (chat, party, guild, combat, trade). Build each with `gameFeature(id) { }`, which registers that feature's message handlers on its own `MessageRouter`, and install them all on the host's `Features`:
    ```kotlin
-   class GuildFeature : GameFeature<ClientMessage, ServerMessage> {
-       override fun install(host: GameServerHost<ClientMessage, ServerMessage>) {
-           host.router.on<ClientMessage.GuildCreate> { session, msg -> ... }
-           host.router.on<ClientMessage.GuildInvite> { session, msg -> ... }
-       }
+   // Player is your game's HostPlayer type; ClientMessage is your message type.
+   val guildFeature = gameFeature<Player, ClientMessage>("guild") {
+       on<ClientMessage.GuildCreate> { player, msg -> ... }
+       on<ClientMessage.GuildInvite> { player, msg -> ... }
    }
+   val features = Features<Player, ClientMessage>().install(chatFeature, partyFeature, guildFeature)
    ```
 3. **Keep the trust boundary server-authoritative**:
    - Assume the client binary and protocol are fully reverse-engineered (e.g., via AI-assisted Ghidra/JADX tools). Client obfuscation is never a substitute for a server check.
    - Clients send intentions/inputs, never authoritative coordinates, HP, cooldowns, or currency.
-   - Enforce `NetOwner` on every entity-targeted input, clamp input tick windows, replicate only entities inside the client's spatial interest partition, and report anomalies to `ViolationSink` (`CountingViolationSink`) rather than logging per bad packet.
+   - Check that the session owns the entity every input targets (report `NetViolation.NotOwner` when it doesn't), clamp input tick windows, replicate only entities inside the client's spatial interest partition, and report anomalies to `ViolationSink` (`CountingViolationSink`) rather than logging per bad packet.

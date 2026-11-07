@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 INLINE = re.compile(r"(?<!`)`([^`\n]+)`(?!`)")
-REPO_LINK = re.compile(r"https://github\.com/awakekt/awake/(?:blob|tree)/[^/\s)]+/([^\s)#?]+)")
+REPO_LINK = re.compile(r"https://github\.com/awakekt/awake/(?:blob|tree)/[^/\s)>]+/([^\s)#?>]+)")
 MODULE = re.compile(r"^:?awake(?::[a-z0-9-]+)+$")
 PATH = re.compile(r"^(?:awake|website|docs|build-logic|samples|scripts|tools)/[A-Za-z0-9_./-]+$")
 TYPE = re.compile(r"^([A-Z][A-Za-z0-9]+)(?:\.([a-z][A-Za-z0-9]*))?(?:\(\))?$")
@@ -84,10 +84,10 @@ def read_ignored(bundle: Path) -> set[str]:
     return {line.split("#", 1)[0].strip() for line in file.read_text().splitlines()} - {""}
 
 
-def references(text: str) -> tuple[set[str], list[tuple[int, str]]]:
-    """The names [text] declares in its fenced code, and each (line, inline reference) outside fences."""
+def references(text: str) -> tuple[set[str], list[tuple[int, str, bool]]]:
+    """The names [text] declares in its fenced code, and each (line, reference, is a link) outside fences."""
     declared: set[str] = set()
-    found: list[tuple[int, str]] = []
+    found: list[tuple[int, str, bool]] = []
     in_fence = False
     for number, line in enumerate(text.splitlines(), start=1):
         if FENCE.match(line):
@@ -96,16 +96,15 @@ def references(text: str) -> tuple[set[str], list[tuple[int, str]]]:
         if in_fence:
             declared.update(DECLARED.findall(line))
             continue
-        found.extend((number, ref) for ref in INLINE.findall(line))
-        found.extend((number, "/" + link) for link in REPO_LINK.findall(line))
+        found.extend((number, ref, False) for ref in INLINE.findall(line))
+        found.extend((number, link.rstrip("."), True) for link in REPO_LINK.findall(line))
     return declared, found
 
 
-def problem(core: Core, ref: str, declared: set[str], ignored: set[str]) -> str | None:
+def problem(core: Core, ref: str, link: bool, declared: set[str], ignored: set[str]) -> str | None:
     """Why [ref] is stale, or None when it holds or isn't a Core reference this checks."""
-    if ref.startswith("/"):
-        path = ref[1:]
-        return None if core.has_path(path) else f"repository path {path} is not in Core"
+    if link:
+        return None if core.has_path(ref) else f"repository path {ref} is not in Core"
     token = ref.strip()
     if token in ignored:
         return None
@@ -137,8 +136,8 @@ def check(bundle: Path, core: Core) -> list[tuple[str, int, str]]:
     failures = []
     for file in skill_files(bundle):
         declared, found = references(file.read_text())
-        for line, ref in found:
-            why = problem(core, ref, declared, ignored)
+        for line, ref, link in found:
+            why = problem(core, ref, link, declared, ignored)
             if why:
                 failures.append((str(file.relative_to(bundle)), line, why))
     return failures

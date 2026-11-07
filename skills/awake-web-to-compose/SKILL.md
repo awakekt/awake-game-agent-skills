@@ -4,7 +4,7 @@ description: Port a website or raw HTML/CSS into Awake Compose. Covers Tailwind 
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-10-03'
+  last-updated: '2026-11-07'
 ---
 
 # Web Reference → Awake Compose
@@ -30,10 +30,19 @@ spacing scale, radii, borders, elevation, icon treatment, content widths, and re
 thresholds. Put product-specific values in that product's complete theme/token value. Do not
 make a website's brand part of the engine-wide Shadcn theme.
 
-Repeated visual patterns become product recipes (for example `AcmeHero`, `AcmeFeatureCard`),
-not copied modifier/style blocks in every screen. Generic Shadcn-compatible look, variants, or
-tokens belong in the design-system layer; mechanics a differently skinned product still needs
-belong below it. The canonical ownership rule is in
+Repeated visual patterns become product recipes, not copied modifier/style blocks in every
+screen. You write them beside the product's theme, for example:
+
+```kotlin
+context(_: Composer)
+fun AcmeHero(title: String, modifier: Modifier = Modifier) { /* product layout */ }
+
+context(_: Composer)
+fun AcmeFeatureCard(feature: Feature, modifier: Modifier = Modifier) { /* product layout */ }
+```
+
+Generic Shadcn-compatible look, variants, or tokens belong in the design-system layer; mechanics a
+differently skinned product still needs belong below it. The canonical ownership rule is in
 [`docs/reference/ui-ownership.md`](https://github.com/awakekt/awake/blob/main/docs/reference/ui-ownership.md).
 
 Read [component extraction](../awake-ui-design-audit/references/component-extraction.md) before

@@ -91,25 +91,25 @@ exact same Store/Contract separation whether rendered via retained Compose (`:aw
 `SceneCanvasElement` nodes. Which one a piece uses is decided by the split in `awake-canvas-binding`:
 world-anchored and editor-authored UI on the canvas, screen-space UI driven by state on Compose.
 
-1. **Never create a "kitchen-sink" `PlayerState` ECS component.** Dumping open window sets, hover
+1. **Never create a "kitchen-sink" player-state ECS component.** Dumping open window sets, hover
    tooltips, chat logs, party/trade/guild views, taskbar shortcuts, and outgoing UI request lists
    into one mutable component on the player entity couples every window to every gameplay system.
 2. **Never write 500+ line imperative `WindowSystem : System` classes** that mix AABB pointer
    hit-testing (`contains(mouse)`), business rules, domain mutation, and direct `CanvasElement` /
    `CanvasText` node mutation inside `update(world, delta)`.
 3. **Split each HUD feature into three focused parts**:
-   - **Contract & Store (`TaskbarContract` / `TaskbarStore`)**: Pure immutable `State`, sealed
-     `Intent` (`WorldSynced`, `SlotActivated`, `ShortcutAssigned`, `SubTabSelected`), and sealed
-     `Effect` (`UseInventorySlot`, `CastSkill`, `PlayUiSound`). Unit-tested on plain JVM with zero
-     ECS or renderer setup.
+   - **Contract & Store (`TaskbarContract` below, held in a `ReducerStore` from `:awake:core:state`)**:
+     Pure immutable `State`, sealed `Intent` (`WorldSynced`, `ActivateSlot`, `SelectPage`), and
+     sealed `Effect` (`ExecuteShortcut`, `PlayClickSound`). Unit-tested on plain JVM with zero ECS
+     or renderer setup.
    - **Pure View / Presenter**: Reads `State` to render Compose widgets or update `CanvasElement`
      properties, and maps pointer/keyboard input into `store.dispatch(Intent)`. Zero domain or
      network mutation inside the view. For canvas views, refer to parts through typed handles
      declared once and resolved once, never string ids: see `awake-canvas-binding`.
-   - **Thin ECS Bridge (`HudSyncSystem`)**: At the start of the HUD frame phase, projects ECS data
-     (`Health`, `Inventory`, `SkillBook`) into `store.dispatch(Intent.WorldSynced(...))`. At the
-     end of the phase, drains `store.drainEffects()` into focused ECS command components or network
-     packets.
+   - **Thin ECS Bridge (`HudBridge` below)**: At the start of the HUD frame phase, projects
+     your game's ECS data (health, inventory, skills) into `store.dispatch(Intent.WorldSynced(...))`.
+     At the end of the phase, drains `store.drainEffects()` into focused ECS command components or
+     network packets.
 
 ```kotlin
 object TaskbarContract {
@@ -128,6 +128,20 @@ object TaskbarContract {
     sealed interface Effect {
         data class ExecuteShortcut(val slotId: String) : Effect
         data object PlayClickSound : Effect
+    }
+}
+
+// Your game's bridge; ReducerStore is Core. Call syncIn at the start of the HUD phase and
+// drainOut at its end, after the view has dispatched its intents.
+class HudBridge(
+    private val taskbar: ReducerStore<TaskbarContract.State, TaskbarContract.Intent, TaskbarContract.Effect>,
+) {
+    fun syncIn(world: World) {
+        taskbar.dispatch(TaskbarContract.Intent.WorldSynced(hpRatio = readHpRatio(world), slots = readSlots(world)))
+    }
+
+    fun drainOut(world: World) {
+        taskbar.drainEffects().forEach { effect -> handle(world, effect) }
     }
 }
 ```
@@ -158,7 +172,7 @@ object TaskbarContract {
 
 - State is in the correct layer: ECS, document, Store/session, hoisted UI, or local `remember`.
 - State holds immutable data and stable IDs, not engine resources or live ECS objects.
-- In-game HUD windows use cohesive per-feature Contracts/Stores—not a monolithic `PlayerState`
+- In-game HUD windows use cohesive per-feature Contracts/Stores—not a monolithic player-state
   component or imperative `System` loops that mix hit-testing, business rules, and node mutation.
 - Intent handling is the only Store mutation path; reducers have no engine or IO side effects.
 - Effects are queued, drained synchronously once, and tested as one-shot work.

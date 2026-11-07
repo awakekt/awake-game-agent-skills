@@ -10,13 +10,14 @@ combat/skill state, animation playback, or game audio systems.
 ### Anti-pattern: Object-Oriented God-Components
 Do not pack stats, health, cooldowns, bitflags, hit lists, boolean animation flags
 (`attackAnimationPending`, `skillAnimationPending`), and UI queues into a single 150-line
-`Combatant` or `PlayerState` class. When everything lives on one component, every system queries the
+combatant or player-state class. When everything lives on one component, every system queries the
 entire world and runs nested `if (c.isDead) ... else if (c.isStunned) ...` branches.
 
 ### Correct pattern: Orthogonal Data Components + `EcsTag` State Markers
 
 Split data by single responsibility and represent discrete states with singleton `EcsTag` markers so
-`world.queryEach` and `world.family` filter entities at the storage level:
+`world.queryEach` and `world.family` filter entities at the storage level. Every type below is your
+game's own; Awake supplies only `Poolable`, `EcsTag` and the storage:
 
 ```kotlin
 // 1. Focused data components
@@ -63,26 +64,28 @@ class RespawnSystem : System {
 
 ---
 
-## 2. One-Shot Cues (`AnimationCue`, `SoundCue`), Never Boolean Polling or `HashMap` Diffing
+## 2. One-Shot Cues, Never Boolean Polling or `HashMap` Diffing
 
 ### Anti-patterns to forbid
-1. **Boolean flag polling on domain components**: Setting `combatant.attackAnimationPending = true`
-   in `CombatSystem` and polling/clearing it in `CombatAnimationSystem`. If two systems read it or
+1. **Boolean flag polling on domain components**: Setting `attackAnimationPending = true` in a
+   combat system and polling/clearing it in a combat animation system. If two systems read it or
    one runs out of order, cues are double-played or dropped.
 2. **Diffing domain state in private `System` maps**: Storing `prevInventoryCount`, `prevCurrency`,
-   or `attackSequences: HashMap<Entity, Long>` inside `GameAudioSystem` and reverse-engineering
+   or `attackSequences: HashMap<Entity, Long>` inside an audio system and reverse-engineering
    whether an item was picked up (`count > prevInventoryCount`) to trigger a sound effect.
 3. **Side-table `HashMap<Entity, ...>` inside a God-System**: Keeping 10+ `HashMap`s inside a single
-   700-line `NetClientSystem`. Store per-entity state on an ECS component (`NetworkReplicated`) and
-   split independent concerns into separate systems (`NetSpawnSystem`, `RemoteInterpolationSystem`,
-   `LocalReconciliationSystem`).
+   700-line network client system. Store per-entity state on an ECS component and split independent
+   concerns into separate systems (spawning, remote interpolation, local reconciliation).
 
 ### Correct pattern: Typed Cue Queues Drained Once Per Frame
 
-Attach a lightweight `PresentationCues` component (or world-level cue buffer) and emit typed sealed
-events at the exact domain transition site:
+Emit a typed cue at the exact domain transition site. Core has no animation cue type, so declare
+your game's own and queue it on a small component. Sound already has a Core queue:
+`AudioCueQueue` in `:awake:scene:audio`, filled by `World.emitAudioCue` and drained by
+`AudioSystem`. Map your game's sound cues to clip paths and emit those:
 
 ```kotlin
+// Your game's cue types and component. Not Awake types.
 sealed interface AnimationCue {
     data class Attack(val motionId: Int) : AnimationCue
     data class CastSkill(val skillId: String, val motionId: Int) : AnimationCue
@@ -91,20 +94,19 @@ sealed interface AnimationCue {
     data object Respawn : AnimationCue
 }
 
-sealed interface SoundCue {
-    data class MeleeSwing(val motionId: Int) : SoundCue
-    data object HitImpact : SoundCue
-    data object ItemPickup : SoundCue
-    data class SkillCast(val skillId: String) : SoundCue
+sealed class SoundCue(val path: String) {
+    data object MeleeSwing : SoundCue("sfx/melee-swing.wav")
+    data object HitImpact : SoundCue("sfx/hit-impact.wav")
+    data object ItemPickup : SoundCue("sfx/item-pickup.wav")
+    data object CastRelease : SoundCue("sfx/cast-release.wav")
+    data object FootstepLeft : SoundCue("sfx/footstep-left.wav")
 }
 
 class EntityCues : Poolable {
     val animations = ArrayDeque<AnimationCue>()
-    val sounds = ArrayDeque<SoundCue>()
 
     override fun reset() {
         animations.clear()
-        sounds.clear()
     }
 }
 
@@ -112,8 +114,9 @@ fun World.emitAnimation(entity: Entity, cue: AnimationCue) {
     ensure(entity, ::EntityCues).animations.addLast(cue)
 }
 
-fun World.emitSound(entity: Entity, cue: SoundCue) {
-    ensure(entity, ::EntityCues).sounds.addLast(cue)
+// Core's emitAudioCue queues a OneShotAudioCue; maxDistance > 0 plays it as 3D sound.
+fun World.emitSound(entity: Entity, cue: SoundCue, maxDistance: Float = 0f) {
+    emitAudioCue(entity, cue.path, maxDistance = maxDistance)
 }
 ```
 
@@ -132,12 +135,12 @@ world.emitSound(playerEntity, SoundCue.ItemPickup)
 ### Anti-patterns to forbid
 1. **Stashing removed components in a `HashMap`**: Never rip `LocomotionAnimation` off a child
    entity on death and store it in `private val deadLocomotions = HashMap<Entity, LocomotionAnimation?>()`.
-   If the entity despawns while dead, the map leaks; if two systems (`CombatSystem` and
-   `CombatAnimationSystem`) both do it, they overwrite each other.
+   If the entity despawns while dead, the map leaks; if two systems (say, combat and combat
+   animation) both do it, they overwrite each other.
 2. **String-prefix `if/else` chains**: Avoid scattering `if (clip.startsWith("skill-") || clip == "hurt")`
    across multiple systems.
 
-### Correct pattern: Single `AnimationCueSystem` with Priority Resolution
+### Correct pattern: One Cue System with Priority Resolution
 
 Keep `LocomotionAnimation` attached to the entity, gate locomotion when `Dead` is present (or when a
 higher-priority action clip is active), and resolve clips through a priority table in one system:
@@ -162,89 +165,84 @@ fun AnimationCue.resolveClip(): ResolvedClip = when (this) {
 }
 ```
 
-`AnimationCueSystem` drains `EntityCues.animations`, picks the highest-priority `ResolvedClip`, and
-Only interrupts the current clip when `incoming.layer.priority >= activeLayer.priority` or when the
-current one-shot clip has finished (`player.isFinished`).
+Your cue system drains `EntityCues.animations`, picks the highest-priority `ResolvedClip`, and
+only interrupts the current clip when `incoming.layer.priority >= activeLayer.priority` or when the
+current one-shot clip has finished (`AnimationPlayer.isFinished`).
 
 ---
 
 ## 4. Spatial and One-Shot Audio with `:awake:scene:audio`
 
-Awake provides `:awake:scene:audio` (`AudioSystem`, `AudioSource`, `AudioListener`, `SceneAudioSource`)
-built on `:awake:core:audio` (`AudioPlayer`, `PositionalAudioMath`).
+Awake provides `:awake:scene:audio` (`AudioSystem`, `AudioSource`, `AudioListener`, `SceneAudioSource`,
+`AudioCueQueue`) built on `:awake:core:audio` (`AudioPlayer`, `SoundHandle`, `PositionalAudioMath`).
 
 1. **Ambient and looping emitters**: Attach `AudioSource(clip, volume, loop = true, isSpatial3D = true)`
    to scene entities and `AudioListener()` to the active camera/player entity. Register Awake's
    `AudioSystem(audioPlayer, clips)` in the scene schedule—do not rewrite spatial distance
    attenuation or stereo panning by hand.
-2. **One-shot gameplay SFX**: Drain `EntityCues.sounds` in a small `SoundCueSystem` that maps each
-   `SoundCue` via a data table (`Map<KClass<out SoundCue>, AudioClip>` or sealed `when`) and plays
-   3D positional sound at the entity's `Transform.position` (or 2D for UI/local pickup sounds).
+2. **One-shot gameplay SFX**: Emit with `World.emitAudioCue` (or `AudioCueQueue.emit`). Each frame
+   `AudioSystem` drains every queue. A cue with `maxDistance > 0` plays as 3D sound at the entity's
+   `Transform.position`; otherwise it plays as 2D (UI and local pickup sounds). It plays only clips
+   it was given, by path, so pass every cue clip in its `clips` map or its loads.
 
 ---
 
-## 5. Animation-Driven Audio Synchronization (`OnStart` / `OnHold` / `OnRelease` & Keyframe Markers)
+## 5. Animation-Driven Audio Synchronization (Start, Hold, Release and Keyframe Markers)
 
 ### Never use `async` / `delay()` coroutines to sync sound with animation
 A coroutine timer (`launch { delay(300); playSound() }`) runs on wall-clock time, while skeletal
-animation runs on simulation time scaled by `player.speed` (`delta * player.speed`). Haste buffs,
-frame hitches, or mid-cast interrupts (stun/death) immediately desync coroutine timers from the
-rendered bone pose.
+animation runs on simulation time scaled by `AnimationPlayer.speed`. Haste buffs, frame hitches,
+or mid-cast interrupts (stun/death) immediately desync coroutine timers from the rendered bone pose.
 
 ### Rules for frame-accurate audio-animation sync
-1. **3-Phase Action Lifecycle (`OnStart` → `OnHold` → `OnRelease` / `OnCancel`) on ECS Components**:
-   - Store `ActionPhase` (`IDLE`, `ON_START`, `ON_HOLD`, `ON_RELEASE`, `DEAD`), playhead tracking (`lastObservedClipId`, `lastObservedClipTime`), and active looping `SoundHandle?` directly on the entity's ECS components—never in `HashMap<Entity, ...>` side tables inside a `System`.
-   - **`OnStart` (Windup clip, `Once`)**: Sets `actionPhase = ActionPhase.ON_START`, plays the opening animation clip, and emits `SoundCue.CastStart`.
-   - **`OnHold` (Channeling loop clip, `Loop`)**: Entered when `OnStart` finishes while `skillCasting == true`. Sets `actionPhase = ActionPhase.ON_HOLD`, plays the looping hold clip, and emits `SoundCue.CastHoldStart` so `AudioSystem` starts a looping `SoundHandle` stored on the entity's `AudioCues.activeHoldSound`.
-   - **`OnRelease` / `OnCancel` (Release clip or Death/Stun interrupt)**: Emits `SoundCue.CastHoldStop` (which calls `activeHoldSound?.stop()` and clears the handle on the entity's `AudioCues`) before playing the release SFX (`SoundCue.CastRelease`).
+1. **Three-phase action lifecycle (start, hold, release or cancel) on ECS components**:
+   - Store the phase (`ActionPhase` below) and the playhead you last saw (`lastObservedClipId`,
+     `lastObservedClipTime`) on the entity's own components, never in `HashMap<Entity, ...>` side
+     tables inside a `System`. Keep the looping hold sound in Core's
+     `AudioCueQueue.activeHoldSound`.
+   - **Start** (windup clip, `Once`): set `ActionPhase.ON_START`, play the opening clip, and emit
+     the cast-start sound cue.
+   - **Hold** (channeling clip, `Loop`): entered when the start clip finishes while the cast is
+     still held. Set `ActionPhase.ON_HOLD`, play the looping clip, and start the looping sound
+     with `AudioPlayer.playSound` (`loop = true`). Store its `SoundHandle` in `activeHoldSound`.
+   - **Release or cancel** (release clip, or a death or stun interrupt): call
+     `AudioCueQueue.stopHoldSound` first, then emit the release sound cue. `AudioCueQueue` is not
+     `Poolable`, so stop the hold sound yourself before you destroy an entity mid-hold.
 
 ```kotlin
+// Your game's phase enum. AudioCueQueue, emitAudioCue and playSound are Core.
 enum class ActionPhase { IDLE, ON_START, ON_HOLD, ON_RELEASE, DEAD }
 
-class AudioCues : Poolable {
-    val pending = ArrayDeque<SoundCue>()
-    var activeHoldSound: SoundHandle? = null
+// Entering ON_HOLD: start the loop and keep its handle on the entity.
+world.ensureAudioCueQueue(entity).activeHoldSound =
+    audioPlayer.playSound(holdClip, loop = true)
 
-    fun stopHoldSound() {
-        activeHoldSound?.stop()
-        activeHoldSound = null
-    }
-
-    override fun reset() {
-        pending.clear()
-        stopHoldSound()
-    }
-}
+// Leaving ON_HOLD for any reason (release, stun, death): stop the loop first.
+world.get<AudioCueQueue>(entity)?.stopHoldSound()
+world.emitSound(entity, SoundCue.CastRelease)
 ```
 
 2. **Timeline Keyframe Marker Crossing `(prevTime, currTime]`**:
-   - Sub-clip events (melee whoosh at `t = 0.18s`, impact at `t = 0.36s`, left/right footsteps at
-     `25%` and `75%` of `walk`/`run` clip duration) must be triggered when the `AnimationPlayer`'s
-     playhead crosses the marker timestamp during `advance(delta * speed)`:
+   - Sub-clip events (melee whoosh at 18% of the clip, impact at 36%, left/right footsteps at
+     25% and 75% of a `walk`/`run` loop) fire when the `AnimationPlayer` playhead crosses the
+     marker during `advance`. Use Core's `crossedTimelineMarker` (`:awake:core:animation`). It
+     takes the marker as a normalized position and handles loop wrap-around:
 
 ```kotlin
-fun crossedMarker(
-    prevTime: Float,
-    currTime: Float,
-    duration: Float,
-    looping: Boolean,
-    markerTime: Float,
-): Boolean {
-    if (duration <= 0f || markerTime !in 0f..duration) return false
-    return if (!looping || currTime >= prevTime) {
-        prevTime < markerTime && currTime >= markerTime
-    } else {
-        // Loop wrapped around duration -> 0f this frame
-        prevTime < markerTime || currTime >= markerTime
-    }
+val now = player.time
+val duration = player.currentClip?.duration ?: 0f
+if (crossedTimelineMarker(prevTime = lastTime, currTime = now, duration = duration,
+        looping = true, markerNormalized = 0.25f)) {
+    world.emitSound(entity, SoundCue.FootstepLeft)
 }
+lastTime = now
 ```
 
 3. **Same-Frame ECS Schedule Order**:
-   Run `GameplaySystems` → `AnimationSystem` (advances playhead, transitions `OnStart`/`OnHold`/`OnRelease`,
-   and emits `SoundCue`s on marker crossings) → `AudioSystem` (drains `SoundCue`s in the same frame
-   with zero-frame latency).
+   Run your gameplay systems, then Core's `AnimationSystem` (advances the playhead), then your
+   system that reads the playhead, moves the phases and emits cues on marker crossings, then
+   `AudioSystem` (drains the cue queues in the same frame, with zero-frame latency).
 4. **Headless Audio & Cue Verification**:
-   Verify ECS cue emission, CastHoldStop interrupt safety, normalized marker crossings, and
-   .ogg/.wav asset quality (earshot CLAP/Whisper/LUFS/loop-seam checks) using
+   Verify cue emission, that the hold sound always stops on an interrupt, normalized marker
+   crossings, and .ogg/.wav asset quality (earshot CLAP/Whisper/LUFS/loop-seam checks) using
    [awake-audio-verification](../../awake-audio-verification/SKILL.md).

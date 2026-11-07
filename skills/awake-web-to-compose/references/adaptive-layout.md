@@ -9,23 +9,29 @@ content-width changes.
 Compose-native source for root-level responsive decisions. Use it to select a product layout mode
 and compose the appropriate structure.
 
-The current runtime does **not** have `BoxWithConstraints`, nested container-query composition,
-window size classes, a responsive grid, `LazyRow`, or lazy grids. Do not imitate those capabilities
+For a nested region that needs its own adaptive policy, Foundation has `BoxWithConstraints`. It
+composes its content during measure with the incoming constraints, so a branch on `maxWidth` has
+no frame delay. Prefer passing a deterministic mode from the owning parent when the parent already
+knows it.
+
+Foundation has `LazyColumn`, but no window size classes, responsive grid, or lazy grids. Jetpack
+Compose's horizontal `LazyRow` has no Awake counterpart either. Do not imitate a missing capability
 with a previous-frame `onSizeChanged` value: that creates resize lag and makes composition depend
-on a measured child size. If a nested layout genuinely needs its own adaptive policy, pass a
-deterministic mode or constraint from its owning parent, or register a Foundation capability gap.
+on a measured child size. Register a Foundation capability gap instead.
 
 ## Model responsive intent as modes
 
 Start from the reference's observed structural changes. Define product-level modes only when the
-content changes meaningfully, for example `Compact`, `Standard`, and `Expanded`; they are not a
-universal engine taxonomy.
+content changes meaningfully, such as the `LandingLayoutMode` below. The product declares it; it is
+not a universal engine taxonomy.
 
 ```kotlin
+enum class LandingLayoutMode { Compact, Standard, Expanded }
+
 val viewport = LocalViewportSize.current
 when (landingLayoutMode(viewport)) {
-    Compact -> LandingContentStacked()
-    Standard, Expanded -> LandingContentSplit()
+    LandingLayoutMode.Compact -> LandingContentStacked()
+    LandingLayoutMode.Standard, LandingLayoutMode.Expanded -> LandingContentSplit()
 }
 ```
 

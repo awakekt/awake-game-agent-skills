@@ -11,7 +11,13 @@ turn every repeated rectangle into a global component.
 2. **Product-local recipe.** Extract a named product component when two or more occurrences have
    the same anatomy, behaviour/state, or values that must change together. Product brand,
    campaign-specific hierarchy, and product-only composition stay beside that product's theme and
-   screens (for example, `AcmeFeatureCard`), not in the engine-wide Shadcn layer.
+   screens, not in the engine-wide Shadcn layer. For example, a product writes its own card:
+
+   ```kotlin
+   context(_: Composer)
+   fun AcmeFeatureCard(feature: Feature, modifier: Modifier = Modifier) { /* product layout */ }
+   ```
+
 3. **Deliberate one-off composition.** Keep a unique content arrangement inline when it is truly
    singular and is built from existing layout primitives and controls. Name the decision in the
    audit when it resembles a component but lacks a second use or stable contract.
