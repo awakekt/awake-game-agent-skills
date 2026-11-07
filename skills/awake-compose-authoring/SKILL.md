@@ -2,12 +2,12 @@
 name: awake-compose-authoring
 description: >
   Author Compose-shaped UI on Awake's retained :awake:compose runtime. Use before adding or changing
-  Compose UI in an editor, tool, sample, or app, and before choosing CompositionLocal, slots,
+  Compose UI in an editor, tool, sample, app, or in-game screen UI, and before choosing CompositionLocal, slots,
   remembered state, or a state boundary. It prevents upstream Compose APIs from being assumed here.
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-08-28'
+  last-updated: '2026-11-07'
   keywords: Awake Compose, Composer, CompositionLocal, CompositionLocalProvider, slot API, state hoisting, remember, editor UI, SubcomposeLayout, zIndex, drawWithCache, nestedScroll
 ---
 
@@ -33,6 +33,9 @@ Then read the focused references below when their decision is involved:
 | A deliberate API divergence | [`11-refinements.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/11-refinements.md) and [`15-compose-parity.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/15-compose-parity.md) |
 | Before building a new draw primitive, `DrawScope` method, or modifier capability | [`15-compose-parity.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/15-compose-parity.md) (what's already **Built** vs a real **Gap**), [`11-refinements.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/11-refinements.md) (whether a divergence has the evidence to be legitimate), and [`10-graphics-layer.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/10-graphics-layer.md) (what's a known, documented non-fixed limitation rather than an oversight) — check all three before designing something new. |
 
+For in-game UI, decide canvas or Compose first with `awake-canvas-binding`: screen-space UI driven
+by game state (windows, dialogs, party frames, skill bar, chat) is Compose and draws over
+`SceneCanvas(world)` in the same host; world-anchored UI stays on the canvas.
 For application-root, scene-session, or `ComposeHost` work, also use `awake-app-composition`.
 For Store/Contract, intents, effects, or application/editor state, also use
 `awake-state-management`.

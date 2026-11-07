@@ -8,7 +8,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-10-26'
+  last-updated: '2026-11-07'
   keywords: Awake state, MVI, Store, Contract, Intent, Effect, StateFlow, reducer, effect draining, editor state, game HUD, window state
 ---
 
@@ -88,7 +88,8 @@ acknowledging that effect.
 
 Game HUDs (inventory, taskbar, skill tree, quest log, party, guild, chat, NPC dialog) follow the
 exact same Store/Contract separation whether rendered via retained Compose (`:awake:compose`) or
-`SceneCanvasElement` nodes:
+`SceneCanvasElement` nodes. Which one a piece uses is decided by the split in `awake-canvas-binding`:
+world-anchored and editor-authored UI on the canvas, screen-space UI driven by state on Compose.
 
 1. **Never create a "kitchen-sink" `PlayerState` ECS component.** Dumping open window sets, hover
    tooltips, chat logs, party/trade/guild views, taskbar shortcuts, and outgoing UI request lists
