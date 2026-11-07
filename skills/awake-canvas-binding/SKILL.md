@@ -11,13 +11,13 @@ license: Apache-2.0
 metadata:
   author: awake
   last-updated: '2026-11-07'
-  keywords: Awake, canvas, Compose, canvas or Compose, canvasContent, CanvasContent, CanvasEntityApplier, CanvasContentSystem, declarative canvas, canvas content, prefab placement, nested compose, canvasPrefab, CanvasParts, CanvasWidgetParts, SceneCanvasElement, CanvasElement, nameplate, HUD widget, typed handle, magic string
+  keywords: Awake, canvas, Compose, canvas or Compose, screen HUD, migrate canvas to Compose, canvasContent, CanvasContent, CanvasEntityApplier, CanvasContentSystem, declarative canvas, canvas content, prefab placement, nested compose, canvasPrefab, CanvasParts, CanvasWidgetParts, SceneCanvasElement, CanvasElement, nameplate, HUD widget, typed handle, magic string
 ---
 
 # Awake Canvas Binding
 
-Use this skill when code drives in-game canvas UI: HUD bars, unit frames, party frames, overlays,
-nameplates. Declare state-driven canvas UI with `canvasContent`. Bind an authored prefab through
+Use this skill when code drives in-game canvas UI: nameplates, bars over entities, floating text,
+target markers, and prefabs authored in an editor. Declare state-driven canvas UI with `canvasContent`. Bind an authored prefab through
 typed `CanvasParts` handles. For the state that drives them, read
 [awake-state-management](../awake-state-management/SKILL.md) (HUD section) first; for sizing and
 spacing, [awake-ui-layout-guidance](../awake-ui-layout-guidance/SKILL.md).
@@ -28,14 +28,17 @@ Decide by where the UI lives and what drives it, not by habit:
 
 | UI | Use | Why |
 |---|---|---|
-| HUD whose elements follow game state: party frames, buff row, skill bar, target frame, quest tracker | **Canvas content** (`canvasContent`) | Elements are declared from state; `if`, `forEach` and `key` add, remove and reorder them with no update code. They stay canvas entities |
+| On the screen, not in the world: HUD bars, party frames, buff row, skill bar, target frame, quest tracker | **Compose** (`:awake:compose`) | It shares one layout, one scale and one drag and drop with the game's windows. A screen HUD on the canvas beside Compose windows needs a bridge (pixels vs canvas units, scale, drag between a canvas slot and a Compose window), and that bridge is where its bugs come from |
 | Anchored to the world: nameplates, health bars over entities, floating damage text, target markers | **Canvas** (content or prefab) | Elements follow entities, sort with the scene, bind to components (`CanvasBinding`), and stay cheap at hundreds of copies |
 | Laid out and themed in an editor, saved with a scene, overridden from data | **Canvas prefab** (`canvasPrefab`, `CanvasParts`) | A prefab is a `ScenePrefab` an editor opens and saves back unchanged. Canvas content can place and bind it |
-| Windows and dialogs with text input, scrolling or focus; chat; menus, launchers, tools | **Compose window** (`:awake:compose`) | Application UI with Compose behaviour. See [awake-compose-authoring](../awake-compose-authoring/SKILL.md) |
+| Windows and dialogs, movable or not; chat; menus, launchers, tools | **Compose window** (`:awake:compose`) | Application UI with Compose behaviour. See [awake-compose-authoring](../awake-compose-authoring/SKILL.md) |
 | One part of a canvas element the canvas can't draw, such as a scrolling list or a text field | **Nested `compose { }`** in that element's content | The UI keeps the element's place in canvas order, its alpha and its follow position |
 
 - Canvas and Compose run in one Compose host: `SceneCanvas(world)` is a composable, so Compose UI
   declared after it draws on top and shares state, drag and drop, and tooltips with it.
+- One system per job: Compose for everything on the screen, canvas for what follows the world. A
+  game with screen UI still on the canvas moves it piece by piece:
+  [moving canvas screen UI to Compose](references/canvas-to-compose.md).
 - Don't keep a hidden canvas copy of a window that moved to Compose. Every canvas element costs a
   little every frame, visible or not, and systems that keep copies hidden scan all of them.
 - Don't park a whole HUD theme as an invisible subtree. Build what is shown; with canvas content,
