@@ -4,7 +4,7 @@ description: Convert FBX source assets, including Mixamo characters and clips, i
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-08-24'
+  last-updated: '2026-11-07'
 ---
 
 # Awake FBX Asset Cooking
@@ -63,8 +63,9 @@ Blender re-export before expanding the runtime format boundary.
 
 ## Escalation boundary
 
-Use `awake-framework-boundary` before proposing `:awake:asset:fbx`, native bindings, or a shared
-FBX cooking module. A future cooker must output GLB and preserve the one-way dependency:
+Core has no FBX module. Use `awake-framework-boundary` before proposing one, native bindings, or a
+shared FBX cooking module. An editor plugin that must import FBX implements the editor
+contract's `AssetConverter`, which turns source bytes into GLB. A future cooker must output GLB and preserve the one-way dependency:
 
 ```text
 FBX source -> offline cooker -> GLB -> :awake:asset:gltf -> core animation / scene rendering

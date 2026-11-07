@@ -9,7 +9,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-09-05'
+  last-updated: '2026-11-07'
 ---
 
 # Consuming Awake Shadcn Recipes
@@ -32,7 +32,7 @@ Every public component in `:awake:ui:shadcn` includes explicit KDoc `Keywords:` 
 |---|---|---|
 | Action buttons, CTAs, icon buttons | `button`, `cta`, `action` | `ShadcnButton` |
 | Form text entry, search fields | `input`, `textfield` | `ShadcnInput` |
-| Grouped content, setting panels | `card`, `panel`, `surface` | `ShadcnCard` (`ShadcnCardHeader`, `ShadcnCardContent`, `ShadcnCardFooter`) |
+| Grouped content, setting panels | `card`, `panel`, `surface` | `ShadcnCard` (`header`, `content`, `footer` in `ShadcnCardScope`) |
 | Structured data grids, list rows | `table`, `data grid` | `ShadcnTable` (`header`, `body`, `row`, `head`, `cell`, `caption`) |
 | List item row with avatar & actions | `item`, `media object`, `row` | `ShadcnItem` |
 | Validated input field wrapper | `form`, `field`, `error` | `ShadcnForm`, `ShadcnFormField` |
@@ -62,28 +62,19 @@ ShadcnButton(
 
 ## 3. Container DSL Scopes & Layout Composition
 
-### A. `ShadcnCard` (Slot & Block DSL)
-Supports both block composition and optional slot parameters (`header`, `footer`, `content`):
+### A. `ShadcnCard` (Section DSL)
+The card's content lambda runs in `ShadcnCardScope`, which adds `header`, `content` and `footer`
+sections. There are no separate card-section components and no slot parameters.
 
 ```kotlin
-// Option 1: Slot API (Concise)
-ShadcnCard(
-    modifier = Modifier.width(360.dp),
-    header = { ShadcnText("Security Overview", variant = ShadcnTextVariant.H3) },
-    footer = { ShadcnButton("Save Changes") }
-) {
-    ShadcnText("Manage 2FA and active tokens.")
-}
-
-// Option 2: Block DSL API
-ShadcnCard(modifier = Modifier.width(360.dp)) {
-    ShadcnCardHeader {
+ShadcnCard(Modifier.width(360.dp)) {
+    header {
         ShadcnText("Security Overview", variant = ShadcnTextVariant.H3)
     }
-    ShadcnCardContent {
+    content {
         ShadcnText("Manage 2FA and active tokens.")
     }
-    ShadcnCardFooter {
+    footer {
         ShadcnButton("Save Changes")
     }
 }
@@ -130,5 +121,5 @@ provideShadcnTheme(theme = ShadcnThemeValues(ShadcnTheme)) {
 
 - All components called use **PascalCase** (`ShadcnButton`, `ShadcnCard`, `ShadcnTable`).
 - Tables use concise DSL methods (`header`, `body`, `row`, `head`, `cell`).
-- Cards use `ShadcnCardScope` or `header`/`footer` slot parameters.
+- Cards use the `ShadcnCardScope` sections (`header`, `content`, `footer`).
 - Built and tested with `./gradlew :awake:ui:shadcn:desktopTest` and `./gradlew :samples:ui-showcase:desktopTest`.

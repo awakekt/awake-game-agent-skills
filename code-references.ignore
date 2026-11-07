@@ -20,3 +20,6 @@ VkInstance
 # Icon packs generated at build time by the icon-codegen plugin, so not in Core's sources.
 HeroIcons
 LucideIcons
+# Names from the sources a port starts from, named on purpose for contrast
+LazyRow            # Jetpack Compose's horizontal lazy list; Awake has only LazyColumn
+AlertTitle         # shadcn/ui's React component, in the web source being ported

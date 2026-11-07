@@ -7,7 +7,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-08-25'
+  last-updated: '2026-11-07'
   keywords: Awake, Platform, Bootstrap, AppSpec, AppModule, ComposeHost, SceneSession, lifecycle
 ---
 
@@ -16,7 +16,7 @@ metadata:
 Use this skill when assembling an application, sample, editor, or tool. It governs composition;
 it does not replace the ECS, rendering, or UI-authoring skills.
 
-Read [the scene-session simplification plan](https://github.com/awakekt/awake/blob/main/docs/tasks/2026-08-25-scene-session-simplification-plan.md)
+Read [the app lifecycle guide](https://github.com/awakekt/awake/blob/main/website/docs/guides/app-lifecycle.md)
 and the `README.md` files in `awake/engine/platform`, `awake/engine/bootstrap`, and `awake/scene`
 before changing a cross-module boundary.
 

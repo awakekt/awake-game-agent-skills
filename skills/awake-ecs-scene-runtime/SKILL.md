@@ -7,8 +7,8 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-10-26'
-  keywords: Awake, ECS, World, Entity, SceneDocument, SceneSession, SceneSchedule, TransformSystem, RenderSystem
+  last-updated: '2026-11-07'
+  keywords: Awake, ECS, World, Entity, SceneDocument, SceneSession, SceneSchedule, TransformSystem, RenderSystem3D
 ---
 
 # Awake ECS Scene Runtime
@@ -17,9 +17,9 @@ Use this skill for a game or sample with ECS-managed 3D content: a `World`, enti
 documents, and scheduled systems. For the surrounding Platform/Bootstrap/Compose composition,
 read [awake-app-composition](../awake-app-composition/SKILL.md) first.
 
-Read [the scene-session simplification plan](https://github.com/awakekt/awake/blob/main/docs/tasks/2026-08-25-scene-session-simplification-plan.md)
-and inspect the actual scene runtime API before writing a DSL call. The session names in that plan
-are the target shape; use the current compatibility API only where it exists today.
+Read [the app lifecycle guide](https://github.com/awakekt/awake/blob/main/website/docs/guides/app-lifecycle.md)
+and [the scene documents guide](https://github.com/awakekt/awake/blob/main/website/docs/guides/scene-documents.md),
+then inspect the actual scene runtime API in `awake/scene/runtime` before writing a DSL call.
 
 ## Ownership
 

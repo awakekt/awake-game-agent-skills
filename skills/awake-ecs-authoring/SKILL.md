@@ -2,16 +2,16 @@
 name: awake-ecs-authoring
 description: >
   Rules for authoring Awake ECS components, systems, gameplay cues, and scenes - component
-  decomposition, EcsTag state markers, AnimationCue/SoundCue pipelines, query/family costs,
+  decomposition, EcsTag state markers, typed animation and audio cues, query/family costs,
   structural-change churn, entity lifecycle, and the scene DSL. Read before adding a component,
   writing a System, triggering animation/sound, or building entities with the scene { } DSL.
   Trigger keywords - ECS, World, entity, component, System.update, queryEach, family, Poolable,
-  EcsTag, AnimationCue, SoundCue, AudioSystem, scene DSL, EntityScope, cameraEntity, MeshRenderer,
+  EcsTag, AudioCueQueue, emitAudioCue, AudioSystem, scene DSL, EntityScope, cameraEntity, MeshRenderer,
   Transform, spawn, destroy.
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-09-17'
+  last-updated: '2026-11-07'
 ---
 
 # Authoring ECS components, systems and scenes in Awake
@@ -37,11 +37,11 @@ class MovementControl : Poolable {
 }
 ```
 
-Two rules that have already bitten this codebase:
+Two rules:
 
-- **`reset()` must clear every field, including flags.** `CameraComponent.needsReset` was
-  omitted, so a recycled component came back still flagged and re-ran its mode reset on the
-  next entity's first frame.
+- **`reset()` must clear every field, including flags.** Leave out a flag such as
+  `CameraRig.needsReset` and a recycled component comes back still flagged. It then reruns its
+  mode reset on the next entity's first frame.
 - **Do not rely on reflective construction.** `world.add<T>(entity)` resolves a no-arg
   constructor at runtime. Kotlin does not emit one for a component holding a value class
   (`Transform.parent: Entity?` is the live example - `Entity` is a value class), and iOS and
@@ -75,13 +75,13 @@ repeated singleton references for source compatibility. `componentAt` does not m
 
 The ECS `World` is the **Single Source of Truth** for both runtime simulation and editor authoring.
 
-1. **Persistent Scene Components** (`TerrainComponent`, `TerrainAssetReference`):
-   - Represent the persistent scene entity saved to scene documents (`.scene.json`) or asset manifests (`.terrain.json`).
-   - Must carry all asset provenance references (`assetPath`, `splatMapPath`, `colorMapPath`, `heightmapAssetPath`, `layers`).
-2. **Ephemeral Tool Capability Components** (`TerrainBrushComponent`, `CameraGizmoComponent`, `Selectable`):
+1. **Persistent Scene Components** (`TerrainComponent`, `TerrainSurfaceReference`):
+   - Saved to the scene document (`.scene.json`) through their scene binding, such as `SceneTerrain`.
+   - Carry everything needed to rebuild the entity: data, asset paths and surface references.
+2. **Ephemeral Tool Capability Components** (your tool's own components, such as a terrain brush):
    - Attached to the entity in `World` only while actively authoring.
-   - Hold interactive tool state: brush radius, strength, falloff, sculpt tool, brush shape, target height, active layer, viewport shading mode (`Textured`, `SplatRgba`, `Satellite`).
-   - Systems and editor tools (a `TerrainMeshRuntimeSystem`, a plugin `ViewportToolProvider` brush) read directly from these components each frame.
+   - Hold interactive tool state: brush radius, strength, falloff, brush shape, target height, active layer.
+   - Systems and editor tools (a plugin `ViewportToolProvider` brush) read them directly each frame.
 3. **Stateless UI Panels**:
    - Compose UI panels and inspector state holders (`*InspectorState`) are pure observers and controllers.
    - **Never store canonical domain or tool state in UI-only memory.** UI state must synchronize with the entity's ECS components in the `World` immediately on interaction.
@@ -93,27 +93,28 @@ components, combat/skill state transitions, animation systems, or audio triggers
 
 1. **No God-Components or God-Systems**:
    - Never pack stats, health, cooldowns, bitflags, hit lists, boolean animation flags, and UI
-     request queues into one `Combatant` or `PlayerState` class. Split into orthogonal data
-     components (`Health`, `CombatStats`, `CombatTarget`) and `EcsTag` state markers (`Dead`,
-     `Stunned`, `InCombat`) so `family`/`queryEach` filters at the storage level instead of running
-     deep `if/else` chains.
-   - Never keep 10+ `HashMap<Entity, ...>` side tables inside a single 700-line `System` (such as a
-     monolithic `NetClientSystem`). Store per-entity state on an ECS component and split independent
+     request queues into one combatant or player-state class. Split it into small data components
+     and `EcsTag` state markers (dead, stunned, in combat) so `family`/`queryEach` filters at the
+     storage level instead of running deep `if/else` chains. The reference shows the split.
+   - Never keep 10+ `HashMap<Entity, ...>` side tables inside a single 700-line `System`, such as
+     one network client system. Store per-entity state on an ECS component and split independent
      responsibilities into separate systems.
-2. **Trigger animations and audio via typed one-shot Cues (`AnimationCue`, `SoundCue`)**:
+2. **Trigger animations and audio via typed one-shot cues**:
    - Never poll and clear boolean flags (`attackAnimationPending = false`) on domain components.
    - Never diff domain state (`count > prevInventoryCount || currency > prevCurrency` or
-     `attackSequences: HashMap<Entity, Long>`) inside `GameAudioSystem` to guess what happened.
-   - Emit sealed `AnimationCue` and `SoundCue` events at the authoritative transition site (loot
-     collected, strike landed, skill cast) and drain them once per frame in presentation systems.
+     `attackSequences: HashMap<Entity, Long>`) inside an audio system to guess what happened.
+   - Emit a cue at the authoritative transition site (loot collected, strike landed, skill cast)
+     and drain it once per frame. Core has no animation cue type: declare your game's own sealed
+     cue type. For sound, call `World.emitAudioCue`, which queues a `OneShotAudioCue` on the
+     entity's `AudioCueQueue`.
 3. **Declarative Animation Priority Table, never component stashing**:
    - Never rip `LocomotionAnimation` off an entity and stash it in a system's
      `HashMap<Entity, LocomotionAnimation?>` when an entity dies.
-   - Resolve clips in a single `AnimationCueSystem` using a priority table (`DEATH > SKILL_CAST >
-     ATTACK > HIT_REACT > LOCOMOTION`) instead of scattered string-prefix `if/else` checks.
-4. **Use `:awake:scene:audio` (`AudioSystem`, `AudioSource`, `AudioListener`)**:
-   - Use Awake's built-in `AudioSystem` for 3D spatial attenuation and stereo panning, paired with a
-     lightweight `SoundCueSystem` for one-shot gameplay SFX.
+   - Resolve clips in one system with a priority table (`DEATH > SKILL_CAST > ATTACK >
+     HIT_REACT > LOCOMOTION`) instead of scattered string-prefix `if/else` checks.
+4. **Use `:awake:scene:audio` (`AudioSystem`, `AudioSource`, `AudioListener`, `AudioCueQueue`)**:
+   - Awake's `AudioSystem` does 3D spatial attenuation and stereo panning. It also drains every
+     `AudioCueQueue` each frame, so one-shot gameplay SFX need no audio system of your own.
 
 ## Systems
 
@@ -135,22 +136,22 @@ avoid it in a per-frame path.
 toolchain, JDK, entity counts, forks, warmups, and measurements. Publish score and error for tag
 and ordinary-component controls; capture GC evidence; run every KMP ECS test target. Cross-runtime
 Flecs/EnTT/Bevy/Unity numbers are architecture references, never substitutes for Awake's same-JVM
-Fleks/Artemis/Ashley harness. See `docs/tasks/archive/2026-08-21-ecs-family-tag-columns.md`.
+Fleks/Artemis/Ashley harness. See "Family tag-column specialization" in `docs/ecs-benchmark-scorecard.md`.
 
 **Archetype promotion currently fails its gate.** The benchmark-only pure-archetype control
 performs real stable-row migration and covers 256 tag signatures. Production maintained families
 still win stable and required/excluded query iteration, while sparse dynamic tags avoid the
 archetype control's roughly 7.6x churn penalty at 100k. Do not add archetype routing from table
 locality intuition alone; first demonstrate a new real workload that clears the matched gate in
-`docs/tasks/archive/2026-08-18-ecs-hybrid-archetype-sparse-set.md`.
+"Sparse vs hybrid vs pure archetype decision" in `docs/ecs-benchmark-scorecard.md`.
 
 **Structural changes are not free.** `world.add` / `world.remove` invalidate the query cache
 and churn the family caches. Never add-and-remove the same component every frame:
 
 When a hot structural path already owns a `ComponentTypeId`, keep class resolution outside the
 entity loop. The cached-ID overloads exist to avoid repeated `T::class`/KClass work; do not route
-them back through class-based mutation helpers. See
-`docs/tasks/archive/2026-08-21-ecs-cached-type-id-churn.md`.
+them back through class-based mutation helpers. See "Cached type-ID structural churn" in
+`docs/ecs-benchmark-scorecard.md`.
 
 ```kotlin
 // Before: two full query-cache invalidations per frame, plus a fresh allocation, purely to
@@ -172,7 +173,7 @@ previouslyActive.forEach { world.remove<ActiveCamera>(it) }
 
 **Registration order is behaviour.** Systems run in registration order within a phase. Input
 must precede intent consumers; the camera pose must be settled before anything reads its basis;
-gameplay systems that emit `AnimationCue` / `SoundCue` must precede the cue drain systems.
+gameplay systems that emit cues must precede the systems that drain them, such as `AudioSystem`.
 If a system reads another's output, say so in a comment at the registration site.
 
 ## Scenes and entities
@@ -194,13 +195,13 @@ world.scene {
 - `configure(::Type) { }` takes an explicit constructor factory (see the reflective-construction rule above).
 - Child entities are spawned via nested `entity("child") { }` blocks and automatically parented to the enclosing entity's `Transform`.
 
-**A camera needs both halves.** `Camera` is the lens `RenderSystem` renders from;
-`CameraComponent` is the control state `CameraSystem` drives. An entity carrying only one is
+**A camera needs both halves.** `Camera` is the lens `RenderSystem3D` renders from;
+`CameraRig` is the control state `CameraSystem` drives. An entity carrying only one is
 silently inert - it will never be rendered from, or never move. Calling `camera(...)` inside `entity { }`
 attaches both; prefer it over hand-assembling either.
 
-Attaching a raw `core.math.Camera` does **not** make an entity a camera - it registers under
-its own type and matches no scene query. Wrap it: `entity("camera") { camera(lens = myCoreCamera) }`.
+Attaching a raw `core.math.Lens` does **not** make an entity a camera - it registers under
+its own type and matches no scene query. Wrap it: `entity("camera") { camera(lens = myLens) }`.
 
 **Own what you destroy.** Keep the `Entity` handles you spawned and destroy exactly those.
 A global `queryEach(SpinControl::class) { destroy(it) }` in a teardown will take out every
@@ -212,11 +213,11 @@ mesh and one material.
 
 ## DSL builders
 
-`@DslMarker` is load-bearing. `SceneGameDsl` is annotated `@AwakeSceneDsl` so the enclosing
-`GameSpecDsl` receiver is hidden inside its block. Without it, an inner `scene(name) { }` call
-silently resolved to the *outer* `GameSpecDsl.scene` extension and installed a second scene
-module - two `World`s, two render callbacks, and `requireService<SceneGameRuntime>()` returning
-the wrong one. Annotate every nested builder receiver.
+`@DslMarker` is load-bearing. `SceneAppDsl` is annotated `@AwakeSceneDsl` so the enclosing
+`AppSpecDsl` receiver is hidden inside its block. Without it, an inner `scene(name) { }` call
+silently resolves to the *outer* `AppSpecDsl.scene` extension and installs a second scene
+module - two `World`s, two render callbacks, and `requireService<SceneAppLifecycleRuntime>()`
+returning the wrong one. Annotate every nested builder receiver.
 
 When you add or change a builder overload, check that a call inside a nested block still binds
 to the member you expect. An overload that merely *fails to match* does not error - it falls
@@ -226,13 +227,13 @@ through to whatever outer extension does match.
 
 - [ ] `reset()` clears every field of the component, flags included.
 - [ ] Components are single-purpose data; discrete states use `EcsTag` singletons instead of god-component `if/else` trees.
-- [ ] Animations and sounds are triggered by typed one-shot cues (`AnimationCue`, `SoundCue`), never by boolean flag polling or diffing domain counts in `HashMap`s.
+- [ ] Animations and sounds are triggered by typed one-shot cues (your own animation cue type, `AudioCueQueue` for sound), never by boolean flag polling or diffing domain counts in `HashMap`s.
 - [ ] Animation playback uses a priority table in one system; removed components (`LocomotionAnimation`) are never stashed in a system `HashMap`.
 - [ ] Spatial audio uses `:awake:scene:audio` (`AudioSystem`, `AudioSource`, `AudioListener`).
 - [ ] Hot tag-family code uses iteration or `componentAt`, not a materialized `components*()` array.
 - [ ] No reflective `world.add<T>(entity)` - factory or instance passed explicitly.
 - [ ] No per-frame add/remove of the same component, and no structural mutation during `queryEach`.
-- [ ] Camera entities carry both `Camera` and `CameraComponent`.
+- [ ] Camera entities carry both `Camera` and `CameraRig`.
 - [ ] Teardown destroys only entities this feature spawned, plus its GPU resources.
 - [ ] Editor tool parameters and asset references live in ECS components on the entity, never in UI-only memory.
 - [ ] New nested DSL receivers are `@DslMarker`-annotated.

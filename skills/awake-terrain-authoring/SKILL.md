@@ -4,12 +4,12 @@ description: Author Awake heightmaps, dynamic terrain edits, geometry clipmaps, 
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-10-03'
+  last-updated: '2026-11-07'
 ---
 
 # Awake Terrain Authoring
 
-Read [the terrain plan](https://github.com/awakekt/awake/blob/main/docs/tasks/2026-08-24-terrain-rendering-plan.md) and
+Read [the terrain guide](https://github.com/awakekt/awake/blob/main/website/docs/guides/terrain.md) and
 [the framework/game boundary](https://github.com/awakekt/awake/blob/main/docs/reference/framework-game-boundary.md) before adding a
 terrain capability.
 
@@ -33,7 +33,11 @@ Awake provides two complementary "cousin" paradigms for rendering terrains at sc
 ## Multi-Texture Splatting
 
 - Multi-layer ground blending uses `TerrainSplatWeightMap` (4-channel RGBA weights) in `awake:asset:terrain` (`splat` package).
-- Rendered on the GPU using `PackShaderSets.TerrainSplat` (`AslTerrainSplatShader` in `awake:asset:shader-pack`) via a 4-layer `texture_2d_array` diffuse texture.
+- Core's own terrain shader, `PackShaderSets.Terrain` in `awake:asset:shader-pack`, draws a neutral grey surface. Surface
+  colour is pack policy.
+- Textured layers come from a `TerrainSurfaceProvider` (in `awake:terrain`). `awake:kit:terrain-layers` ships one:
+  `TerrainLayersSurfaceProvider` blends layers from a palette and a control map with `TerrainLayersShaders`, which
+  sample a 2D texture array. A control texel keeps its four strongest layers, or eight where more meet.
 - Check a layered surface with the `DominantLayer`, `LayerWeights` and `Lightmap` [debug views](../awake-render-debug-views/SKILL.md) before blaming import data or the shader.
 
 ## Ownership
@@ -74,9 +78,11 @@ committing and returns `HeightmapChange(revision, dirtyRegion)` only when sample
 
 ## Rendering and collision composition
 
-- Render terrain patches as ordinary `MeshRenderer` entities with `MeshBounds`; reuse
-  `RenderSystem` culling and `LodGroup` mesh selection. Do not add a terrain-specific backend
-  declaration, frame loop, or render feature unless existing generic paths are proven insufficient.
+- A `TerrainComponent` (in `awake:scene:scene3d`) is drawn by `TerrainContentSystem`, and
+  `TerrainClipmapSystem` keeps its clipmap rings on the camera. Pick a surface with a provider;
+  do not add a terrain-specific backend declaration, frame loop, or render feature.
+- Render other terrain patches as ordinary `MeshRenderer` entities with `MeshBounds`; reuse
+  `RenderSystem3D` culling and `LodGroup` mesh selection.
 - `HeightFieldShape` is an explicit game/scene-composition conversion. It is square and static;
   reject incompatible source data rather than crop, centre, or resample it silently.
 - `physics:api` never imports `asset:terrain`, and `asset:terrain` never imports physics.
