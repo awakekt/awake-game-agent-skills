@@ -34,10 +34,11 @@ Then read the focused references below when their decision is involved:
 | A deliberate API divergence | [`11-refinements.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/11-refinements.md) and [`15-compose-parity.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/15-compose-parity.md) |
 | Before building a new draw primitive, `DrawScope` method, or modifier capability | [`15-compose-parity.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/15-compose-parity.md) (what's already **Built** vs a real **Gap**), [`11-refinements.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/11-refinements.md) (whether a divergence has the evidence to be legitimate), and [`10-graphics-layer.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/10-graphics-layer.md) (what's a known, documented non-fixed limitation rather than an oversight) — check all three before designing something new. |
 
-For in-game UI, decide canvas or Compose first with `awake-canvas-binding`: a HUD whose elements
-follow game state (party frames, skill bar, buffs) is canvas content, and world-anchored UI stays on
-the canvas. Windows, dialogs, chat and menus are Compose and draw over `SceneCanvas(world)` in the
-same host. Compose UI inside one canvas element is nested `compose { }` (below).
+For in-game UI, decide canvas or Compose first with `awake-canvas-binding`: everything on the
+screen (HUD bars, skill bar, party frames, windows, dialogs, chat, menus) is Compose and draws over
+`SceneCanvas(world)` in the same host; UI that follows the world (nameplates, bars over entities)
+stays on the canvas. Skin pixel-art frames, buttons and gauges with `ImageFill`, `drawImageFill` and
+`drawImageFillBar`. Compose UI inside one canvas element is nested `compose { }` (below).
 For application-root, scene-session, or `ComposeHost` work, also use `awake-app-composition`.
 For Store/Contract, intents, effects, or application/editor state, also use
 `awake-state-management`.
