@@ -39,6 +39,19 @@ screen (HUD bars, skill bar, party frames, windows, dialogs, chat, menus) is Com
 `SceneCanvas(world)` in the same host; UI that follows the world (nameplates, bars over entities)
 stays on the canvas. Skin pixel-art frames, buttons and gauges with `ImageFill`, `drawImageFill` and
 `drawImageFillBar`. Compose UI inside one canvas element is nested `compose { }` (below).
+
+Reach for these in order, and stop at the first that fits:
+
+1. **A Compose component and layout** (row, column, a button, a skinned part). This covers most game
+   UI, including pieces that change every frame such as cooldowns and bars.
+2. **Compose `Canvas` / `DrawScope`** for custom drawing no component gives: a radial sweep, a
+   minimap, a graph. It is the drawing surface inside Compose, not a second UI system: don't
+   hand-place a whole HUD on it.
+3. **The scene canvas** only for what Compose has no answer for yet: UI that follows the world,
+   particles, and prefabs an editor saves as data.
+
+Don't add new canvas widgets, canvas theming, canvas input handling or canvas touch controls: each
+duplicates Compose. A replacement deprecates what it replaces in the same change.
 For application-root, scene-session, or `ComposeHost` work, also use `awake-app-composition`.
 For Store/Contract, intents, effects, or application/editor state, also use
 `awake-state-management`.
