@@ -8,7 +8,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-07'
+  last-updated: '2026-11-16'
   keywords: Awake Compose, Composer, CompositionLocal, CompositionLocalProvider, slot API, state hoisting, remember, editor UI, SubcomposeLayout, zIndex, drawWithCache, nestedScroll, nested compose, canvas element, SceneCanvas, canvasContent
 ---
 
@@ -29,6 +29,7 @@ Then read the focused references below when their decision is involved:
 | Repeated, subcomposed, or lazy content | [`08-lazy-lists.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/08-lazy-lists.md) and `SubcomposeLayout` / `BoxWithConstraints` |
 | Gestures, multi-touch, or nested scroll | `Modifier.transformable`, `Modifier.nestedScroll`, [`12-gestures.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/12-gestures.md) |
 | Custom caching or sibling layer ordering | `Modifier.drawWithCache`, `Modifier.zIndex`, [`10-graphics-layer.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/10-graphics-layer.md) |
+| Write state and layout that stay correct when a host skips unchanged frames | [`references/frame-skipping.md`](references/frame-skipping.md) |
 | Decide whether a gap belongs to a component, its parent, or a distinct layout relationship | [`references/structural-spacing.md`](references/structural-spacing.md) |
 | Choose fixed versus adaptive size, Row/Column vs FlowRow/FlowColumn vs FlexBox, preview frames, Spacer, arrangement, or alignment | [`awake-ui-layout-guidance`](../awake-ui-layout-guidance/SKILL.md) |
 | A deliberate API divergence | [`11-refinements.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/11-refinements.md) and [`15-compose-parity.md`](https://github.com/awakekt/awake/blob/main/docs/reference/compose-engine/15-compose-parity.md) |
@@ -169,6 +170,12 @@ a component swapped which inspector section was open. So:
 On Core 0.11.x and earlier, `key(...)` keys nodes only. There, give each repeated or conditional
 item its own keyed node (a `Column`/`Box`) so its memos live in that node, and never `remember`
 after a variable-length sequence in the same node.
+
+### State a skipped frame can see
+
+A host may skip a frame whose inputs did not change. Hold what the UI shows in snapshot state, not
+a plain field, and do not compose animated content inside measure. Read
+[`references/frame-skipping.md`](references/frame-skipping.md) before writing state a screen reads.
 
 ## Compose inside a canvas element: `compose { }`
 

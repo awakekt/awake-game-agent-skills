@@ -8,7 +8,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-07'
+  last-updated: '2026-11-16'
   keywords: Awake state, MVI, Store, Contract, Intent, Effect, StateFlow, reducer, effect draining, editor state, game HUD, window state
 ---
 
@@ -155,8 +155,10 @@ class HudBridge(
   can request the transition, but simulation output never writes authored data back implicitly.
 - UI events dispatch intents. UI rendering reads state; it does not directly mutate the World or
   provider resources.
-- Retained Compose has no snapshot invalidation. `StateFlow.value` is read during each frame; a
-  host adapter may provide the Store/state through `CompositionLocalProvider`, but that does not
+- Retained Compose recomposes every frame by default, so `StateFlow.value` is read during each
+  frame. A host that opts into skipping unchanged frames only sees snapshot state: mirror a value
+  the UI shows into `mutableStateOf` at the boundary rather than polling a plain field (see
+  `awake-compose-authoring`, "State a skipped frame can see"). A host adapter may provide the Store/state through `CompositionLocalProvider`, but that does not
   transfer construction, disposal, or effect ownership to the UI.
 
 ## Required tests
