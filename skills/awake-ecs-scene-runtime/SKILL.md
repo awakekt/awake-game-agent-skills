@@ -7,7 +7,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-07'
+  last-updated: '2026-11-21'
   keywords: Awake, ECS, World, Entity, SceneDocument, SceneSession, SceneSchedule, TransformSystem, RenderSystem3D
 ---
 
@@ -72,6 +72,23 @@ Use the `scene:physics` components; never touch a Jolt handle or native pointer 
 - Destroying an entity removes its body first; do not cache body handles past entity teardown.
 
 Changing the physics contract or the Jolt bridge itself: `awake-physics-jolt`.
+
+## Resilience: Missing Content Is Normal
+
+A scene that streams its content always has something not there yet: a mesh still downloading, a
+sound the build left out, a feature the game hasn't built. Write systems for that case.
+
+- **Every wait has a deadline.** A system that waits for readiness (every `MeshCollider` to get its
+  `PhysicsBody`, a texture, a download) goes on with what it has after a limit, logs what was still
+  missing, and takes the rest in as it arrives. An unbounded `?: return` on readiness stalls a
+  feature forever when one asset never loads, and only on the slow platform that loses it.
+- **Missing art or sound falls back.** Draw a placeholder or cull it, play nothing, log it once per
+  id, and list it in the project's import or audit report. Never throw, and never block a frame.
+- **Unbuilt means a visible refusal.** A feature the game doesn't have yet answers with a message
+  the player sees, decided by the server in a networked game, never a silent no-op. Keep one registry
+  of handled and refused entries, and fail CI on an entry that is in neither.
+- **Prove it.** Test each feature with one dependency withheld (a mesh that never loads, a missing
+  file), and drive the real input path, not a state set by the test.
 
 ## Lifecycle and Verification
 
