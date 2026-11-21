@@ -3,6 +3,7 @@
 # check_code_references.py skips them. Anything else missing from Core is drift: fix the skill.
 ClassCastException
 HashMap
+ImageIO
 Iterator
 ThreadMXBean
 StateFlow
