@@ -41,13 +41,13 @@ with no GPU.
 4. Write each frame as `frame-0000.png`, `frame-0001.png`, ... into one directory per clip. On the
    JVM, `BufferedImage` and `ImageIO` write a PNG with no new dependency.
 5. Read back every Nth step rather than every step when the simulation runs faster than the clip:
-   at 60 steps a second, every 4th step gives 15 fps.
+   at 60 steps a second, every 5th step gives 12 fps.
 
 Rules for the run:
 
 - Record the frames inside the test that asserts the behaviour, behind a switch (a system property
   or an environment variable), so a normal run writes nothing and costs nothing.
-- Keep a clip short: 2 to 6 seconds, 30 to 90 frames. Crop to the region that moves when it is
+- Keep a clip short: 2 to 5 seconds, 24 to 60 frames. Crop to the region that moves when it is
   small on screen.
 - Hold the first and last frames for half a second so a looping GIF reads as start and end.
 - Draw no debug overlay the claim doesn't need. If the overlay is the evidence (a route, a hit box),
@@ -57,33 +57,55 @@ Rules for the run:
 
 ## Encode the GIF
 
-Use an existing encoder; don't write one.
+Use existing tools; don't write an encoder. Small is the default: a reviewer's page loads every clip.
 
-- `gifski` (preferred): high quality and small, from the PNG frames.
+1. **Encode** from the PNG frames at 12 fps, 480 px wide, 128 colours, no dither. Dither noise
+   changes every frame and defeats the GIF's frame-to-frame compression.
 
-  ```bash
-  gifski --fps 15 --width 640 --quality 80 -o walk-after.gif frames/frame-*.png
-  ```
+   - `gifski` (preferred):
 
-- `ffmpeg` (fallback): two passes through a palette, or the colours band.
+     ```bash
+     gifski --fps 12 --width 480 --quality 70 -o walk-after.gif frames/frame-*.png
+     ```
 
-  ```bash
-  ffmpeg -y -framerate 15 -i frames/frame-%04d.png \
-    -vf "scale=640:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4" \
-    walk-after.gif
-  ```
+   - `ffmpeg` (fallback): two passes through a palette that only counts what changes:
+
+     ```bash
+     ffmpeg -y -framerate 12 -i frames/frame-%04d.png \
+       -vf "fps=12,scale=480:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
+       walk-after.gif
+     ```
+
+2. **Shrink** it with `gifsicle`, which keeps only each frame's changed rectangle and drops detail the
+   eye doesn't see:
+
+   ```bash
+   gifsicle -O3 --lossy=80 walk-after.gif -o walk-after.gif
+   ```
+
+Measured on 60 frames of a rider over a phone HUD: the earlier 15 fps, 640 px, 256-colour dithered
+GIF was 676 KB; these settings make 360 KB, and `gifsicle` 272 KB.
 
 Limits:
 
 | Setting | Value |
 |---|---|
-| Frame rate | 12 to 15 fps |
-| Width | 480 to 640 px (a phone layout: its height at 640 px or less) |
-| Size | under 10 MB, the pull request attachment limit; aim for under 3 MB |
+| Frame rate | 10 to 12 fps; 15 only when the claim is about smoothness |
+| Width | 480 px (a phone layout: its height at 480 px or less); 640 px only for small text |
+| Colours | 128; 64 for flat UI |
+| Size | under 1 MB each; never over 3 MB |
 | Loop | forever (both encoders' default) |
 
-Over the limit: lower the width, then the frame rate, then crop, then shorten. Never lower the
-quality until the motion the clip proves is lost to banding.
+Over the limit, in this order: crop to the region that moves, shorten the clip, lower the frame
+rate, lower the width, then `--lossy=120`. Stop before the motion the clip proves is lost.
+
+**Still over 1 MB:** post an MP4 instead. The same clip as H.264 at 480 px was 76 KB, and GitHub plays an
+MP4 dropped into a pull request inline:
+
+```bash
+ffmpeg -y -framerate 12 -i frames/frame-%04d.png -vf "scale=480:-2" \
+  -c:v libx264 -pix_fmt yuv420p -crf 28 -movflags +faststart walk-after.mp4
+```
 
 ## Attach it
 
