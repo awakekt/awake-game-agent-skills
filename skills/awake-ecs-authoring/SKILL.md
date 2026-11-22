@@ -176,11 +176,13 @@ must precede intent consumers; the camera pose must be settled before anything r
 gameplay systems that emit cues must precede the systems that drain them, such as `AudioSystem`.
 If a system reads another's output, say so in a comment at the registration site.
 
-**Narrow queries, bounded caches, and tier-scaled streamers.** Lead `queryEach` with the narrowest
-component (a player marker before `MovementControl`; active families over dormant entities). Never
-key a map or set by a mutable `data class` component (`var` fields mutate `hashCode()`); key by
-`Entity` and prune on entity removal. Every spatial streamer must scale reach and per-frame spawn
-budget by view distance and graphics tier instead of hardcoding desktop/Far constants.
+**Narrow queries, bounded caches, and tier-scaled streamers.** Read
+[system-perf-and-memory.md](references/system-perf-and-memory.md) before writing per-frame
+streaming, deferred-lookup, or world-HUD systems. Lead `queryEach` with the narrowest component,
+cap deferred lookup retries, key side-tables by `Entity` (never component instances) with active
+pruning and `close()` cleanup, avoid per-frame `HashMap.clear()`+re-put or uncached
+`measureTextWidth`, and scale streamer reach/budgets plus mobile quality overrides within mobile
+tier ceilings.
 
 ## Scenes and entities
 
