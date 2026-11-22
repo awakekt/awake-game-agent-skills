@@ -4,7 +4,7 @@ description: Author Awake heightmaps, dynamic terrain edits, geometry clipmaps, 
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-07'
+  last-updated: '2026-11-22'
 ---
 
 # Awake Terrain Authoring
@@ -86,6 +86,21 @@ committing and returns `HeightmapChange(revision, dirtyRegion)` only when sample
 - `HeightFieldShape` is an explicit game/scene-composition conversion. It is square and static;
   reject incompatible source data rather than crop, centre, or resample it silently.
 - `physics:api` never imports `asset:terrain`, and `asset:terrain` never imports physics.
+
+## Streaming budgets and mobile tiers
+
+Multi-area open worlds quickly exhaust mobile GPU memory and Android's 512 MiB ART `largeHeap`
+ceiling if streaming radii and quality floors assume desktop hardware:
+
+- **Couple area streaming reach to view distance.** Scale surface load reach and unload hysteresis
+  margins with the active view distance (near, mid, or far) so standing at a multi-area
+  junction on mid or near does not mount four distant clipmaps and water meshes at once.
+- **Scale per-frame prop spawn budgets by graphics tier.** Pass a tier-scaled `nodesPerFrame`
+  budget to `BudgetedCellNodeSpawner` rather than spawning desktop-sized bursts on low-spec phones.
+- **Keep mobile low/floor tiers closed-loop.** Floor tiers must enable dynamic resolution scaling
+  (for example 360 to 480 short edge at 30 fps) rather than pinning a fixed resolution, so unlisted
+  weak GPUs self-heal instead of stalling at single-digit FPS. Turn off anisotropic filtering on
+  low presets, and avoid pinning uncompressed multi-MB audio/asset buffers on Android's Java heap.
 
 ## Routing
 

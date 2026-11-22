@@ -11,7 +11,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-07'
+  last-updated: '2026-11-22'
 ---
 
 # Authoring ECS components, systems and scenes in Awake
@@ -176,6 +176,12 @@ must precede intent consumers; the camera pose must be settled before anything r
 gameplay systems that emit cues must precede the systems that drain them, such as `AudioSystem`.
 If a system reads another's output, say so in a comment at the registration site.
 
+**Narrow queries, bounded caches, and tier-scaled streamers.** Lead `queryEach` with the narrowest
+component (a player marker before `MovementControl`; active families over dormant entities). Never
+key a map or set by a mutable `data class` component (`var` fields mutate `hashCode()`); key by
+`Entity` and prune on entity removal. Every spatial streamer must scale reach and per-frame spawn
+budget by view distance and graphics tier instead of hardcoding desktop/Far constants.
+
 ## Scenes and entities
 
 ```kotlin
@@ -234,6 +240,8 @@ through to whatever outer extension does match.
 - [ ] No reflective `world.add<T>(entity)` - factory or instance passed explicitly.
 - [ ] No per-frame add/remove of the same component, and no structural mutation during `queryEach`.
 - [ ] Camera entities carry both `Camera` and `CameraRig`.
-- [ ] Teardown destroys only entities this feature spawned, plus its GPU resources.
+- [ ] Teardown destroys only entities this feature spawned, plus its GPU resources, and prunes any system maps.
+- [ ] `queryEach` leads with the narrowest component; no `Map`/`Set` is keyed by a mutable `data class` component.
+- [ ] Spatial streamers scale reach and per-frame spawn budgets with view distance and graphics tier.
 - [ ] Editor tool parameters and asset references live in ECS components on the entity, never in UI-only memory.
 - [ ] New nested DSL receivers are `@DslMarker`-annotated.
