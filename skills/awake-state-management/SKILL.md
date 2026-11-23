@@ -16,8 +16,9 @@ metadata:
 
 This skill governs application, editor, sample, and in-game HUD state. It does not replace ECS
 state or turn engine modules into app architecture. Read [the app-composition skill](../awake-app-composition/SKILL.md)
-for lifecycle ownership and [the Compose-authoring skill](../awake-compose-authoring/SKILL.md) when
-retained Compose renders the state.
+for lifecycle ownership, [the Compose-authoring skill](../awake-compose-authoring/SKILL.md) when
+retained Compose renders the state, and [hud-bridge-and-dispatchers.md](references/hud-bridge-and-dispatchers.md)
+for the complete 4-way State/UI/Behavior/`SceneBridge` template and `childStoreScope` / `ioDispatcher` rules.
 
 ## Choose the smallest state shape
 
