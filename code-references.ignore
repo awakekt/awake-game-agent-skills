@@ -5,6 +5,7 @@ ClassCastException
 HashMap
 ImageIO
 Iterator
+KClass
 ThreadMXBean
 StateFlow
 ProtoBuf

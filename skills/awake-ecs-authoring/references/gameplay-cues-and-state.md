@@ -48,13 +48,15 @@ Now systems iterate only the entities whose state matches, eliminating deep `if/
 ```kotlin
 // RespawnSystem only visits entities carrying Dead — living entities are never branched on.
 class RespawnSystem : System {
+    private val revived = EntityList()
+
     override fun update(world: World, delta: Float) {
-        val revived = ArrayList<Entity>()
-        world.family(Dead::class, RespawnTimer::class).forEach { entity, _, timer ->
+        revived.clear()
+        world.family<Dead, RespawnTimer>().forEach { entity, _, timer ->
             timer.elapsed += delta
-            if (timer.elapsed >= timer.durationSeconds) revived += entity
+            if (timer.elapsed >= timer.durationSeconds) revived.add(entity)
         }
-        for (entity in revived) {
+        revived.forEach { entity ->
             world.remove<Dead>(entity)
             world.get<Health>(entity)?.let { it.current = it.max }
         }
