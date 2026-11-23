@@ -88,7 +88,7 @@ class HudFrameContext {
         internal set
 }
 
-class InGameUiBridge(
+class InGameUiSession(
     private val parentScope: CoroutineScope,
 ) : SceneBridge {
     private val drainer = ContextualEffectDrainer<HudFrameContext>()
@@ -147,7 +147,7 @@ class InGameUiBridge(
 // Installed once at the app/UI host boundary — never runs on headless/SimulationOnly hosts:
 scene("game") {
     runProject(project)
-    bridge { buildGameUiBridge(project, session.coroutineScope, windowRegistry) }
+    bridge { inGameUiSession(project, session.coroutineScope, windowRegistry) }
     ui { InGameUiRoot(windowRegistry) }
 }
 ```
