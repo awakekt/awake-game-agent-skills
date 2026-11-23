@@ -129,10 +129,11 @@ class SpinSystem : System {
 ```
 
 **Query cost, inline lambdas, and unboxed bags.** The 1- and 2-component typed `queryEach`
-overloads and `Family1`/`Family2` caches allocate nothing when you:
+overloads, `Family1`/`Family2` caches, and `IteratingSystem` / `Family1System` / `Family2System`
+base classes allocate nothing when you:
 - Pass an **inline lambda literal** (never `::fn` or a function object, which boxes every `Entity`).
 - Prefer reified `queryEach<A, B>` or hoisted `KClass` tokens; avoid `vararg` `World.query` per frame.
-- Exclude sleeping/hidden entities via a `world.family { all(...); exclude(...) }` cached per `World.generation`.
+- Exclude sleeping/hidden entities via `world.familyExcluding(A::class, B::class, Exclude::class)` (packed `Family1`/`Family2`) or `Family1System`/`Family2System` (auto-rebinds per `World.generation`).
 - Store scratch entity lists/sets in primitive-backed `EntityList` / `EntitySet` fields — never `ArrayList<Entity>`.
 See [system-perf-and-memory.md](references/system-perf-and-memory.md).
 
@@ -228,7 +229,7 @@ through to whatever outer extension does match.
 - [ ] Hot tag-family code uses iteration or `componentAt`, not a materialized `components*()` array.
 - [ ] Scratch entity lists and membership sets use unboxed `EntityList` / `EntitySet` fields (never `ArrayList<Entity>` or per-frame `world.query(...)`).
 - [ ] Every `queryEach` / `family.forEach` call passes an inline lambda literal (never a function object/reference) and uses reified overloads or hoisted `KClass` tokens.
-- [ ] Per-frame loops over large entity populations exclude sleeping/hidden entities via a cached `world.family { all(...); exclude(...) }` rather than scanning the whole world.
+- [ ] Per-frame loops over large entity populations exclude sleeping/hidden entities via `world.familyExcluding(...)`, `Family1System`/`Family2System`, or a cached `world.family { all(...); exclude(...) }` rather than scanning the whole world.
 - [ ] No reflective `world.add<T>(entity)` - factory or instance passed explicitly.
 - [ ] No per-frame add/remove of the same component, and no structural mutation during `queryEach`.
 - [ ] Camera entities carry both `Camera` and `CameraRig`.

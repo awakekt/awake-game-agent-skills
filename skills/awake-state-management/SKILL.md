@@ -8,8 +8,8 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-16'
-  keywords: Awake state, MVI, Store, Contract, Intent, Effect, StateFlow, reducer, effect draining, editor state, game HUD, window state
+  last-updated: '2026-11-23'
+  keywords: Awake state, MVI, Store, Contract, Intent, Effect, EffectSource, EffectDrainer, drainEffects, StateFlow, reducer, effect draining, editor state, game HUD, window state
 ---
 
 # Awake State Management
@@ -70,14 +70,29 @@ assets, call the renderer, or start an uncontrolled coroutine.
 `StateFlow` plus a buffered `Channel<Effect>` is the established sample implementation. Flow and
 coroutines are allowed outside the frame loop; a retained Compose tree does not collect them.
 During a frame it reads the current state snapshot and dispatches intents through explicit
-callbacks. The application/session owner drains effects synchronously once per frame:
+callbacks. The application/session owner drains effects synchronously once per frame using the
+zero-allocation callback overload `drainEffects(action)` (or `EffectDrainer` across multiple
+`EffectSource` stores so idle frames allocate nothing):
 
 ```kotlin
-store.drainEffects().forEach { effect ->
+// Single store — zero-allocation per-frame drain (prefer over drainEffects().forEach { ... }):
+store.drainEffects { effect ->
     when (effect) {
         EditorContract.Effect.SaveDocument -> sceneWriter.save(session.document)
     }
 }
+
+// Multiple HUD or editor stores coordinated at one frame boundary:
+val drainer = EffectDrainer()
+drainer.bind(store, closeWithDrainer = true) { effect ->
+    when (effect) {
+        EditorContract.Effect.SaveDocument -> sceneWriter.save(session.document)
+    }
+}
+// Once per frame at the session/HUD boundary:
+drainer.drain()
+// On teardown:
+drainer.close()
 ```
 
 An asynchronous effect handler starts work outside the frame thread and dispatches a result intent
@@ -141,7 +156,7 @@ class HudBridge(
     }
 
     fun drainOut(world: World) {
-        taskbar.drainEffects().forEach { effect -> handle(world, effect) }
+        taskbar.drainEffects { effect -> handle(world, effect) }
     }
 }
 ```

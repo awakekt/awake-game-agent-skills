@@ -27,8 +27,10 @@ clear **all** caches and close channels inside `close()` so scene transitions do
 - **Keep off-screen and interest-hidden entities asleep and excluded.** In large streamed or
   networked worlds, attach a sleep tag/component to entities outside interest reach (and strip
   per-frame locomotion/controller components if the server owns their transforms). Iterate only
-  active entities via a cached `world.family { all(...); exclude(...) }` rebound on
-  `World.generation` changes — never scan every entity in the world and check a visibility boolean
+  active entities via `world.familyExcluding(A::class, B::class, Exclude::class)` (packed
+  `Family1`/`Family2` with zero per-entity `World.get` lookups) or subclass `Family1System` /
+  `Family2System` / `IteratingSystem` (which automatically cache and rebind the family on
+  `World.generation` changes) — never scan every entity in the world and check a visibility boolean
   per frame.
 - **Pass inline lambda literals to `queryEach` and `family.forEach`.** Never pass a function
   reference (`::step`) or `(Entity, A) -> Unit` value; non-inlined calls box every `Entity` handle
