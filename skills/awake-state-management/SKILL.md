@@ -9,7 +9,7 @@ license: Apache-2.0
 metadata:
   author: awake
   last-updated: '2026-11-23'
-  keywords: Awake state, MVI, Store, Contract, Intent, Effect, EffectSource, EffectDrainer, drainEffects, StateFlow, reducer, effect draining, editor state, game HUD, window state
+  keywords: Awake state, MVI, Store, Contract, Intent, Effect, EffectSource, EffectDrainer, ContextualEffectDrainer, SceneBridge, drainEffects, StateFlow, reducer, effect draining, editor state, game HUD, window state
 ---
 
 # Awake State Management
@@ -84,17 +84,18 @@ store.drainEffects { effect ->
     }
 }
 
-// Multiple HUD or editor stores coordinated at one frame boundary:
-val drainer = EffectDrainer()
-drainer.bind(store, closeWithDrainer = true) { effect ->
-    when (effect) {
-        EditorContract.Effect.SaveDocument -> sceneWriter.save(session.document)
-    }
-}
-// Once per frame at the session/HUD boundary:
-drainer.drain()
-// On teardown:
-drainer.close()
+// Multiple HUD or editor stores coordinated at the session frame boundary via SceneBridge + ContextualEffectDrainer:
+val drainer = ContextualEffectDrainer<HudFrameContext>()
+drainer.bind(
+    store = store,
+    closeWithDrainer = true,
+    sync = { ctx, state -> syncIntoStore(ctx, state) },
+    onEffect = { ctx, effect -> handleEffect(ctx, effect) },
+)
+// Attach to SceneSession via `SceneAppDsl.bridge { ... }` or `session.addBridge(...)`:
+//   beforeAdvance(world, delta) -> drainer.drainEffects(ctx)  // 0-frame click latency into ECS
+//   afterAdvance(world, delta)  -> drainer.sync(ctx)          // fresh ECS state before Compose draws
+//   close()                     -> drainer.close()            // closes every owned store automatically
 ```
 
 An asynchronous effect handler starts work outside the frame thread and dispatches a result intent
@@ -111,9 +112,10 @@ world-anchored and editor-authored UI on the canvas, screen-space UI driven by s
 1. **Never create a "kitchen-sink" player-state ECS component.** Dumping open window sets, hover
    tooltips, chat logs, party/trade/guild views, taskbar shortcuts, and outgoing UI request lists
    into one mutable component on the player entity couples every window to every gameplay system.
-2. **Never write 500+ line imperative `WindowSystem : System` classes** that mix AABB pointer
-   hit-testing (`contains(mouse)`), business rules, domain mutation, and direct `CanvasElement` /
-   `CanvasText` node mutation inside `update(world, delta)`.
+2. **Never put Compose UI, Compose state, or window/HUD registries inside an ECS `System`.**
+   - Do **not** import `com.awakekt.awake.compose.*` inside any ECS `System` class or file.
+   - Do **not** use singleton ECS components on `World` as a Compose lambda registry (`world.registerWindow { ... }`) or write one `WindowSystem : System, AutoCloseable` per HUD panel (it leaks `AutoCloseable` stores, runs redundant per-frame `localPlayer()` lookups, and drags UI into `SceneSchedule`).
+   - Do **not** write 500+ line imperative `WindowSystem : System` classes mixing hit-testing, business rules, and direct `CanvasElement` mutation inside `update(world, delta)`.
 3. **Split each HUD feature into three focused parts**:
    - **Contract & Store (`TaskbarContract` below, held in a `ReducerStore` from `:awake:core:state`)**:
      Pure immutable `State`, sealed `Intent` (`WorldSynced`, `ActivateSlot`, `SelectPage`), and
@@ -123,10 +125,12 @@ world-anchored and editor-authored UI on the canvas, screen-space UI driven by s
      properties, and maps pointer/keyboard input into `store.dispatch(Intent)`. Zero domain or
      network mutation inside the view. For canvas views, refer to parts through typed handles
      declared once and resolved once, never string ids: see `awake-canvas-binding`.
-   - **Thin ECS Bridge (`HudBridge` below)**: At the start of the HUD frame phase, projects
-     your game's ECS data (health, inventory, skills) into `store.dispatch(Intent.WorldSynced(...))`.
-     At the end of the phase, drains `store.drainEffects()` into focused ECS command components or
-     network packets.
+   - **Session-level `SceneBridge` + `ContextualEffectDrainer<C>` (`HudBridge` below)**: Mounted at
+     the app/Compose host boundary via `SceneAppDsl.bridge { ... }` or `session.addBridge(...)` —
+     **not** as an ECS `System`. `beforeAdvance` calls `drainer.drainEffects(ctx)` so UI clicks
+     reach simulation on the same frame; `afterAdvance` calls `drainer.sync(ctx)` so Compose renders
+     fresh ECS state; `close()` disposes every owned store automatically (`closeWithDrainer = true`).
+     Read loaded tables/assets from `LoadedProject.content` instead of wrapping UI in `SceneFeature.plan`.
 
 ```kotlin
 object TaskbarContract {
@@ -148,18 +152,14 @@ object TaskbarContract {
     }
 }
 
-// Your game's bridge; ReducerStore is Core. Call syncIn at the start of the HUD phase and
-// drainOut at its end, after the view has dispatched its intents.
+// Your game's SceneBridge; ReducerStore & ContextualEffectDrainer are Core.
+// Register via `SceneAppDsl.bridge { ... }` — never as an ECS `System`.
 class HudBridge(
-    private val taskbar: ReducerStore<TaskbarContract.State, TaskbarContract.Intent, TaskbarContract.Effect>,
-) {
-    fun syncIn(world: World) {
-        taskbar.dispatch(TaskbarContract.Intent.WorldSynced(hpRatio = readHpRatio(world), slots = readSlots(world)))
-    }
-
-    fun drainOut(world: World) {
-        taskbar.drainEffects { effect -> handle(world, effect) }
-    }
+    private val drainer: ContextualEffectDrainer<World>,
+) : SceneBridge {
+    override fun beforeAdvance(world: World, delta: Float) = drainer.drainEffects(world)
+    override fun afterAdvance(world: World, delta: Float) = drainer.sync(world)
+    override fun close() = drainer.close()
 }
 ```
 

@@ -28,6 +28,7 @@ clear **all** caches and close channels inside `close()` so scene transitions do
 | Whole-tick early-out (`delta <= 0f`, paused, table/terrain not loaded) | Override `shouldProcess(world, delta): Boolean` | Skips `begin`/`process`/`end` in O(1) |
 | Hot `Family1System`/`Family2System`/`IteratingSystem` when 3+ subclasses exist | `override fun update(world: World, delta: Float) = runTick(world, delta) { ... }` | Keeps `process` **monomorphic** on JVM and avoids Wasm `call_ref` (**2.2–3.3× faster** at 10k entities than megamorphic `super.update`) |
 | 3+ components or arbitrary predicate | `IteratingSystem(spec)` or `world.family(spec)` + hoisted `ComponentType<T>` handles | Avoids per-entity `KClass` lookups |
+| HUD windows, Compose UI sync, and Store effect draining | `SceneBridge` (`SceneAppDsl.bridge { ... }`) + `ContextualEffectDrainer<C>` (never an ECS `System`) | Keeps Compose out of ECS, resolves `localPlayer` once per frame instead of N times, gives 0-frame click latency (`beforeAdvance` drain / `afterAdvance` sync), and closes all owned stores automatically |
 
 - Lead `queryEach` with the narrowest component (a player/active marker before `MovementControl`;
   `MeshRenderer` / `ParticleEmitter` / `ParticleEmitterSource` before `Transform`). Never scan

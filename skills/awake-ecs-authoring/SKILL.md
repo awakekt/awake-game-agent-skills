@@ -239,4 +239,5 @@ through to whatever outer extension does match.
 - [ ] `queryEach` leads with the narrowest component; no `Map`/`Set` is keyed by a mutable `data class` component.
 - [ ] Spatial streamers scale reach and per-frame spawn budgets with view distance and graphics tier.
 - [ ] Editor tool parameters and asset references live in ECS components on the entity, never in UI-only memory.
+- [ ] No Compose UI (`com.awakekt.awake.compose.*`), window registries, or per-window `AutoCloseable` store wrappers inside ECS `System` classes; bridge UI/HUD stores via `SceneBridge` + `ContextualEffectDrainer` at the session boundary (`awake-state-management`).
 - [ ] New nested DSL receivers are `@DslMarker`-annotated.
