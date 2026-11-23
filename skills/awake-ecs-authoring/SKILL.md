@@ -5,13 +5,13 @@ description: >
   decomposition, EcsTag state markers, typed animation and audio cues, query/family costs,
   structural-change churn, entity lifecycle, and the scene DSL. Read before adding a component,
   writing a System, triggering animation/sound, or building entities with the scene { } DSL.
-  Trigger keywords - ECS, World, entity, component, System.update, queryEach, family, Poolable,
-  EcsTag, AudioCueQueue, emitAudioCue, AudioSystem, scene DSL, EntityScope, cameraEntity, MeshRenderer,
-  Transform, spawn, destroy.
+  Trigger keywords - ECS, World, entity, component, System.update, queryEach, family, EntityList,
+  EntitySet, Poolable, EcsTag, AudioCueQueue, emitAudioCue, AudioSystem, scene DSL, EntityScope,
+  cameraEntity, MeshRenderer, Transform, spawn, destroy.
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-22'
+  last-updated: '2026-11-23'
 ---
 
 # Authoring ECS components, systems and scenes in Awake
@@ -121,53 +121,43 @@ components, combat/skill state transitions, animation systems, or audio triggers
 ```kotlin
 class SpinSystem : System {
     override fun update(world: World, delta: Float) {
-        world.queryEach(Transform::class, SpinControl::class) { _, transform, spin ->
+        world.queryEach<Transform, SpinControl> { _, transform, spin ->
             transform.rotation.y = spin.radians
         }
     }
 }
 ```
 
-**Query cost.** The 1- and 2-component typed `queryEach` overloads run off maintained family
-caches and allocate nothing. The `vararg` overload calls `types.toSet()` on every invocation -
-avoid it in a per-frame path.
+**Query cost, inline lambdas, and unboxed bags.** The 1- and 2-component typed `queryEach`
+overloads and `Family1`/`Family2` caches allocate nothing when you:
+- Pass an **inline lambda literal** (never `::fn` or a function object, which boxes every `Entity`).
+- Prefer reified `queryEach<A, B>` or hoisted `KClass` tokens; avoid `vararg` `World.query` per frame.
+- Exclude sleeping/hidden entities via a `world.family { all(...); exclude(...) }` cached per `World.generation`.
+- Store scratch entity lists/sets in primitive-backed `EntityList` / `EntitySet` fields — never `ArrayList<Entity>`.
+See [system-perf-and-memory.md](references/system-perf-and-memory.md).
 
-**Family storage changes require matched evidence.** Use the exact pre-change commit, Kotlin
-toolchain, JDK, entity counts, forks, warmups, and measurements. Publish score and error for tag
-and ordinary-component controls; capture GC evidence; run every KMP ECS test target. Cross-runtime
-Flecs/EnTT/Bevy/Unity numbers are architecture references, never substitutes for Awake's same-JVM
-Fleks/Artemis/Ashley harness. See "Family tag-column specialization" in `docs/ecs-benchmark-scorecard.md`.
+**Family storage and archetype gates.** Any family-storage or archetype change requires matched
+same-JVM Fleks/Artemis/Ashley benchmark evidence (tag + ordinary controls, GC evidence, all KMP
+targets); maintained families currently beat pure archetypes on stable/excluded queries and avoid
+the ~7.6x dynamic-tag churn penalty. See `docs/ecs-benchmark-scorecard.md`.
 
-**Archetype promotion currently fails its gate.** The benchmark-only pure-archetype control
-performs real stable-row migration and covers 256 tag signatures. Production maintained families
-still win stable and required/excluded query iteration, while sparse dynamic tags avoid the
-archetype control's roughly 7.6x churn penalty at 100k. Do not add archetype routing from table
-locality intuition alone; first demonstrate a new real workload that clears the matched gate in
-"Sparse vs hybrid vs pure archetype decision" in `docs/ecs-benchmark-scorecard.md`.
-
-**Structural changes are not free.** `world.add` / `world.remove` invalidate the query cache
-and churn the family caches. Never add-and-remove the same component every frame:
-
-When a hot structural path already owns a `ComponentTypeId`, keep class resolution outside the
-entity loop. The cached-ID overloads exist to avoid repeated `T::class`/KClass work; do not route
-them back through class-based mutation helpers. See "Cached type-ID structural churn" in
-`docs/ecs-benchmark-scorecard.md`.
+**Structural changes are not free.** `world.add` / `world.remove` invalidate query caches and churn
+families — never add-and-remove the same component every frame (keep it resident and mutate its
+fields), and keep `ComponentTypeId` resolution outside entity loops.
 
 ```kotlin
-// Before: two full query-cache invalidations per frame, plus a fresh allocation, purely to
-// zero two floats that the next system overwrites anyway.
-world.remove<MovementControl>(target)
-world.ensure(target, ::MovementControl)
-
-// After: keep the component resident, mutate its fields.
+// Keep the component resident instead of remove() + ensure() every frame:
 world.get<MovementControl>(target)?.apply { moveX = 0f; moveZ = 0f }
 ```
 
-**Never mutate the world while iterating it.** `queryEach` walks a family cache whose backing
-array is swap-mutated by removal. Collect first, then act:
+**Never mutate the world while iterating it.** `queryEach` walks a swap-mutated backing array.
+Collect into a reusable `EntityList` field, then act:
 
 ```kotlin
-val previouslyActive = world.query(ActiveCamera::class)
+private val previouslyActive = EntityList()
+// inside update(world, delta):
+previouslyActive.clear()
+world.queryEach<ActiveCamera> { entity, _ -> previouslyActive.add(entity) }
 previouslyActive.forEach { world.remove<ActiveCamera>(it) }
 ```
 
@@ -177,12 +167,9 @@ gameplay systems that emit cues must precede the systems that drain them, such a
 If a system reads another's output, say so in a comment at the registration site.
 
 **Narrow queries, bounded caches, and tier-scaled streamers.** Read
-[system-perf-and-memory.md](references/system-perf-and-memory.md) before writing per-frame
-streaming, deferred-lookup, or world-HUD systems. Lead `queryEach` with the narrowest component,
-cap deferred lookup retries, key side-tables by `Entity` (never component instances) with active
-pruning and `close()` cleanup, avoid per-frame `HashMap.clear()`+re-put or uncached
-`measureTextWidth`, and scale streamer reach/budgets plus mobile quality overrides within mobile
-tier ceilings.
+[system-perf-and-memory.md](references/system-perf-and-memory.md) for narrow `queryEach` ordering,
+excluded/sleeping families, unboxed `EntityList`/`EntitySet` bags, retry caps, `Entity`-keyed
+side-tables with `close()` cleanup, HUD GC traps, and mobile tier ceilings.
 
 ## Scenes and entities
 
@@ -239,6 +226,9 @@ through to whatever outer extension does match.
 - [ ] Animation playback uses a priority table in one system; removed components (`LocomotionAnimation`) are never stashed in a system `HashMap`.
 - [ ] Spatial audio uses `:awake:scene:audio` (`AudioSystem`, `AudioSource`, `AudioListener`).
 - [ ] Hot tag-family code uses iteration or `componentAt`, not a materialized `components*()` array.
+- [ ] Scratch entity lists and membership sets use unboxed `EntityList` / `EntitySet` fields (never `ArrayList<Entity>` or per-frame `world.query(...)`).
+- [ ] Every `queryEach` / `family.forEach` call passes an inline lambda literal (never a function object/reference) and uses reified overloads or hoisted `KClass` tokens.
+- [ ] Per-frame loops over large entity populations exclude sleeping/hidden entities via a cached `world.family { all(...); exclude(...) }` rather than scanning the whole world.
 - [ ] No reflective `world.add<T>(entity)` - factory or instance passed explicitly.
 - [ ] No per-frame add/remove of the same component, and no structural mutation during `queryEach`.
 - [ ] Camera entities carry both `Camera` and `CameraRig`.

@@ -19,11 +19,23 @@ Key per-entity side-tables by `Entity` and prune dead entries (`!world.isAlive(e
 Every `AutoCloseable` system that caches prefabs, parsed nodes, spawned models, or channels must
 clear **all** caches and close channels inside `close()` so scene transitions do not leak them.
 
-## 2. Narrow queries and bounded retry loops
+## 2. Narrow queries, excluded families, and unboxed entity bags
 
 - Lead `queryEach` with the narrowest component (a player/active marker before `MovementControl`;
   `MeshRenderer` / `ParticleEmitter` / `ParticleEmitterSource` before `Transform`). Never scan
   `queryEach(Transform::class)` across the entire scene on a timer.
+- **Keep off-screen and interest-hidden entities asleep and excluded.** In large streamed or
+  networked worlds, attach a sleep tag/component to entities outside interest reach (and strip
+  per-frame locomotion/controller components if the server owns their transforms). Iterate only
+  active entities via a cached `world.family { all(...); exclude(...) }` rebound on
+  `World.generation` changes — never scan every entity in the world and check a visibility boolean
+  per frame.
+- **Pass inline lambda literals to `queryEach` and `family.forEach`.** Never pass a function
+  reference (`::step`) or `(Entity, A) -> Unit` value; non-inlined calls box every `Entity` handle
+  on JVM, Android, and Wasm.
+- **Use `EntityList` and `EntitySet` instead of `ArrayList<Entity>` / `HashSet<Entity>`.** Reuse
+  primitive-backed `EntityList` scratch buffers (`clear()`, `add()`, inline `forEach`,
+  `swapRemoveAt()`) as fields on the `System` instead of allocating a new collection per tick.
 - Any deferred resolution loop (`unresolved > 0` waiting for async prefabs or parts) must carry a
   hard retry cap (`MAX_SEARCHES`) or exponential backoff. Without a cap, one empty or audio-only
   prefab turns a one-time lookup into a permanent periodic stutter.
