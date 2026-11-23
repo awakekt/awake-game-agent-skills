@@ -5,8 +5,9 @@ description: >
   decomposition, EcsTag state markers, typed animation and audio cues, query/family costs,
   structural-change churn, entity lifecycle, and the scene DSL. Read before adding a component,
   writing a System, triggering animation/sound, or building entities with the scene { } DSL.
-  Trigger keywords - ECS, World, entity, component, System.update, queryEach, family, EntityList,
-  EntitySet, Poolable, EcsTag, AudioCueQueue, emitAudioCue, AudioSystem, scene DSL, EntityScope,
+  Trigger keywords - ECS, World, entity, component, System.update, queryEach, family, FamilySpec,
+  Family1System, Family2System, IteratingSystem, runTick, shouldProcess, EntityList, EntitySet,
+  Poolable, EcsTag, AudioCueQueue, emitAudioCue, AudioSystem, scene DSL, EntityScope,
   cameraEntity, MeshRenderer, Transform, spawn, destroy.
 license: Apache-2.0
 metadata:
@@ -128,13 +129,15 @@ class SpinSystem : System {
 }
 ```
 
-**Query cost, inline lambdas, and unboxed bags.** The 1- and 2-component typed `queryEach`
-overloads and `Family1`/`Family2` caches allocate nothing when you:
+**Query cost, inline lambdas, `FamilySpec`, and monomorphic `runTick`.** The 1- and 2-component
+typed `queryEach` overloads, `Family1`/`Family2` caches, and `IteratingSystem` / `Family1System` /
+`Family2System` base classes allocate nothing when you:
 - Pass an **inline lambda literal** (never `::fn` or a function object, which boxes every `Entity`).
-- Prefer reified `queryEach<A, B>` or hoisted `KClass` tokens; avoid `vararg` `World.query` per frame.
-- Exclude sleeping/hidden entities via a `world.family { all(...); exclude(...) }` cached per `World.generation`.
+- Prefer reified `queryEach<A, B>`, hoisted `ComponentType<T>` handles, or hoisted `KClass` tokens; avoid `vararg` `World.query` per frame.
+- Filter packed `Family1`/`Family2` with a hoisted `FamilySpec` (`FamilySpec.exclude(...)`, `FamilySpec.all(...)`, `familySpec { ... }`) via `world.family(A::class, B::class, SPEC)` or `Family1System`/`Family2System` (3.3–3.6× faster than unpacked `world.family { ... }` + `World.get`; never use deprecated `familyExcluding`).
+- Override `shouldProcess(world, delta)` for O(1) whole-tick early-outs, and route hot `Family1System`/`Family2System`/`IteratingSystem` subclasses through inline `runTick(world, delta) { ... }` to avoid megamorphic `process()` dispatch (2.2–3.3× faster at 10k entities).
 - Store scratch entity lists/sets in primitive-backed `EntityList` / `EntitySet` fields — never `ArrayList<Entity>`.
-See [system-perf-and-memory.md](references/system-perf-and-memory.md).
+See the query/system decision table and streaming/shadow/cursor rules in [system-perf-and-memory.md](references/system-perf-and-memory.md).
 
 **Family storage and archetype gates.** Any family-storage or archetype change requires matched
 same-JVM Fleks/Artemis/Ashley benchmark evidence (tag + ordinary controls, GC evidence, all KMP
@@ -228,7 +231,7 @@ through to whatever outer extension does match.
 - [ ] Hot tag-family code uses iteration or `componentAt`, not a materialized `components*()` array.
 - [ ] Scratch entity lists and membership sets use unboxed `EntityList` / `EntitySet` fields (never `ArrayList<Entity>` or per-frame `world.query(...)`).
 - [ ] Every `queryEach` / `family.forEach` call passes an inline lambda literal (never a function object/reference) and uses reified overloads or hoisted `KClass` tokens.
-- [ ] Per-frame loops over large entity populations exclude sleeping/hidden entities via a cached `world.family { all(...); exclude(...) }` rather than scanning the whole world.
+- [ ] Per-frame loops over large entity populations exclude sleeping/hidden/static entities via a hoisted `FamilySpec` (`FamilySpec.exclude(...)`, `familySpec { ... }`) passed to `world.family(..., spec)` or `Family1System`/`Family2System` (with `shouldProcess` for whole-tick guards and inline `runTick` on high-entity hot subclasses), rather than scanning the whole world or using deprecated `familyExcluding(...)`.
 - [ ] No reflective `world.add<T>(entity)` - factory or instance passed explicitly.
 - [ ] No per-frame add/remove of the same component, and no structural mutation during `queryEach`.
 - [ ] Camera entities carry both `Camera` and `CameraRig`.
@@ -236,4 +239,5 @@ through to whatever outer extension does match.
 - [ ] `queryEach` leads with the narrowest component; no `Map`/`Set` is keyed by a mutable `data class` component.
 - [ ] Spatial streamers scale reach and per-frame spawn budgets with view distance and graphics tier.
 - [ ] Editor tool parameters and asset references live in ECS components on the entity, never in UI-only memory.
+- [ ] No Compose UI (`com.awakekt.awake.compose.*`), window registries, or per-window `AutoCloseable` store wrappers inside ECS `System` classes; bridge UI/HUD stores via `SceneBridge` + `ContextualEffectDrainer` at the session boundary (`awake-state-management`).
 - [ ] New nested DSL receivers are `@DslMarker`-annotated.

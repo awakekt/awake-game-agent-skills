@@ -8,16 +8,18 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-16'
-  keywords: Awake state, MVI, Store, Contract, Intent, Effect, StateFlow, reducer, effect draining, editor state, game HUD, window state
+  last-updated: '2026-11-23'
+  keywords: Awake state, MVI, Store, Contract, Intent, Effect, EffectSource, EffectDrainer, ContextualEffectDrainer, SceneBridge, SceneBridgeHandle, drainEffects, StateFlow, reducer, effect draining, editor state, overlay state, ViewModel, window state
 ---
 
 # Awake State Management
 
-This skill governs application, editor, sample, and in-game HUD state. It does not replace ECS
+This skill governs application, editor, sample, and scene overlay state. It does not replace ECS
 state or turn engine modules into app architecture. Read [the app-composition skill](../awake-app-composition/SKILL.md)
-for lifecycle ownership and [the Compose-authoring skill](../awake-compose-authoring/SKILL.md) when
-retained Compose renders the state.
+for lifecycle ownership, [the Compose-authoring skill](../awake-compose-authoring/SKILL.md) when
+retained Compose renders the state, and [scene-bridge-and-dispatchers.md](references/scene-bridge-and-dispatchers.md)
+for the complete declarative 4-way State/UI/Behavior/`SceneBridge` template (scene-scoped ViewModel
+pattern), naming rules, and `childStoreScope` / `ioDispatcher` guidance.
 
 ## Choose the smallest state shape
 
@@ -67,17 +69,40 @@ object EditorContract {
 Effect when work must leave the reducer. Reducers do not write files, mutate the World, load
 assets, call the renderer, or start an uncontrolled coroutine.
 
-`StateFlow` plus a buffered `Channel<Effect>` is the established sample implementation. Flow and
+`StateFlow` plus a buffered `Channel<Effect>` is provided out of the box by `:awake:core:state`
+(`reducerStore` / `DefaultReducerStore` for pure reducers, `MutableEffectStore` for custom domain
+methods — never hand-roll a duplicate `MutableStateFlow` + `Channel<Effect>` store). Flow and
 coroutines are allowed outside the frame loop; a retained Compose tree does not collect them.
 During a frame it reads the current state snapshot and dispatches intents through explicit
-callbacks. The application/session owner drains effects synchronously once per frame:
+callbacks. The application/session owner drains effects synchronously once per frame using the
+zero-allocation callback overload `drainEffects(action)` (or `EffectDrainer` across multiple
+`EffectSource` stores so idle frames allocate nothing):
 
 ```kotlin
-store.drainEffects().forEach { effect ->
+// Single store — zero-allocation per-frame drain (prefer over drainEffects().forEach { ... }):
+store.drainEffects { effect ->
     when (effect) {
         EditorContract.Effect.SaveDocument -> sceneWriter.save(session.document)
     }
 }
+
+// Multiple scene stores coordinated at the session frame boundary via SceneBridge + ContextualEffectDrainer:
+val drainer = ContextualEffectDrainer<FrameContext>()
+drainer.bind(
+    store = store,
+    closeWithDrainer = true,
+    sync = { ctx, state -> syncIntoStore(ctx, state) },
+    onEffect = { ctx, effect -> handleEffect(ctx, effect) },
+)
+// Pair directly with declarative Compose UI (acts like a scene-scoped ViewModel):
+//   ui(bridge = { SceneUiModel(session.coroutineScope) }) { model -> SceneOverlay(model) }
+// Or keep the SceneBridgeHandle<T> for lifecycle hooks / tests too:
+//   val model = bridge { SceneUiModel(session.coroutineScope) }
+//   ui(model) { active -> SceneOverlay(active) }
+// Frame order inside SceneSession:
+//   beforeAdvance(world, delta) -> drainer.drainEffects(ctx)  // 0-frame click latency into ECS
+//   afterAdvance(world, delta)  -> drainer.sync(ctx)          // fresh ECS state before Compose draws
+//   close()                     -> drainer.close()            // closes every owned store automatically
 ```
 
 An asynchronous effect handler starts work outside the frame thread and dispatches a result intent
@@ -94,9 +119,10 @@ world-anchored and editor-authored UI on the canvas, screen-space UI driven by s
 1. **Never create a "kitchen-sink" player-state ECS component.** Dumping open window sets, hover
    tooltips, chat logs, party/trade/guild views, taskbar shortcuts, and outgoing UI request lists
    into one mutable component on the player entity couples every window to every gameplay system.
-2. **Never write 500+ line imperative `WindowSystem : System` classes** that mix AABB pointer
-   hit-testing (`contains(mouse)`), business rules, domain mutation, and direct `CanvasElement` /
-   `CanvasText` node mutation inside `update(world, delta)`.
+2. **Never put Compose UI, Compose state, or window/HUD registries inside an ECS `System`.**
+   - Do **not** import `com.awakekt.awake.compose.*` inside any ECS `System` class or file.
+   - Do **not** use singleton ECS components on `World` as a Compose lambda registry (`world.registerWindow { ... }`) or write one `WindowSystem : System, AutoCloseable` per HUD panel (it leaks `AutoCloseable` stores, runs redundant per-frame `localPlayer()` lookups, and drags UI into `SceneSchedule`).
+   - Do **not** write 500+ line imperative `WindowSystem : System` classes mixing hit-testing, business rules, and direct `CanvasElement` mutation inside `update(world, delta)`.
 3. **Split each HUD feature into three focused parts**:
    - **Contract & Store (`TaskbarContract` below, held in a `ReducerStore` from `:awake:core:state`)**:
      Pure immutable `State`, sealed `Intent` (`WorldSynced`, `ActivateSlot`, `SelectPage`), and
@@ -106,10 +132,15 @@ world-anchored and editor-authored UI on the canvas, screen-space UI driven by s
      properties, and maps pointer/keyboard input into `store.dispatch(Intent)`. Zero domain or
      network mutation inside the view. For canvas views, refer to parts through typed handles
      declared once and resolved once, never string ids: see `awake-canvas-binding`.
-   - **Thin ECS Bridge (`HudBridge` below)**: At the start of the HUD frame phase, projects
-     your game's ECS data (health, inventory, skills) into `store.dispatch(Intent.WorldSynced(...))`.
-     At the end of the phase, drains `store.drainEffects()` into focused ECS command components or
-     network packets.
+   - **Session-level `SceneBridge` + `ContextualEffectDrainer<C>` (scene-scoped ViewModel)**: Mounted
+     declaratively at the Compose host boundary via `ui(bridge = { ... }) { model -> ... }` or
+     `val handle = bridge { ... }; ui(handle) { model -> ... }` — **not** as an ECS `System`.
+     `beforeAdvance` calls `drainer.drainEffects(ctx)` so UI clicks reach simulation on the same
+     frame; `afterAdvance` calls `drainer.sync(ctx)` so Compose renders fresh ECS state; `close()`
+     disposes every owned store automatically (`closeWithDrainer = true`). Read loaded tables/assets
+     from `LoadedProject.content` instead of wrapping UI in `SceneFeature.plan`. Name bridges and
+     screens after their actual domain or overlay (for example *PlayOverlayModel* or *EmotePanel*),
+     avoiding vague `Game*` or `Hud*` boilerplate prefixes.
 
 ```kotlin
 object TaskbarContract {
@@ -131,18 +162,24 @@ object TaskbarContract {
     }
 }
 
-// Your game's bridge; ReducerStore is Core. Call syncIn at the start of the HUD phase and
-// drainOut at its end, after the view has dispatched its intents.
-class HudBridge(
-    private val taskbar: ReducerStore<TaskbarContract.State, TaskbarContract.Intent, TaskbarContract.Effect>,
-) {
-    fun syncIn(world: World) {
-        taskbar.dispatch(TaskbarContract.Intent.WorldSynced(hpRatio = readHpRatio(world), slots = readSlots(world)))
+// Scene-scoped ViewModel implementing SceneBridge; ReducerStore & ContextualEffectDrainer are Core.
+// Pair directly with declarative Compose UI via `ui(bridge = { ... }) { model -> ... }`.
+class PlayOverlayModel(parentScope: CoroutineScope) : SceneBridge {
+    private val drainer = ContextualEffectDrainer<World>()
+    val taskbar = taskbarStore(scope = parentScope.childStoreScope())
+
+    init {
+        drainer.bind(
+            store = taskbar,
+            closeWithDrainer = true,
+            sync = { world, state -> syncTaskbar(world, state, taskbar::dispatch) },
+            onEffect = { world, effect -> handleTaskbarEffect(world, effect) },
+        )
     }
 
-    fun drainOut(world: World) {
-        taskbar.drainEffects().forEach { effect -> handle(world, effect) }
-    }
+    override fun beforeAdvance(world: World, delta: Float) = drainer.drainEffects(world)
+    override fun afterAdvance(world: World, delta: Float) = drainer.sync(world)
+    override fun close() = drainer.close()
 }
 ```
 
