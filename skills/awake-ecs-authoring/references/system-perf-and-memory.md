@@ -19,19 +19,33 @@ Key per-entity side-tables by `Entity` and prune dead entries (`!world.isAlive(e
 Every `AutoCloseable` system that caches prefabs, parsed nodes, spawned models, or channels must
 clear **all** caches and close channels inside `close()` so scene transitions do not leak them.
 
-## 2. Narrow queries, excluded families, and unboxed entity bags
+## 2. Choosing the right query/system pattern, `FamilySpec`, `runTick`, and unboxed bags
+
+| Need | Use | Why |
+|---|---|---|
+| 1–2 packed components, no extra filter | `world.queryEach<A, B> { ... }` or `Family1System` / `Family2System` | Zero `World.get` lookups, zero allocations |
+| 1–2 packed components + `all` / `one` / `exclude` | Hoisted `FamilySpec` (`FamilySpec.exclude(...)`, `FamilySpec.all(...)`, `familySpec { ... }`) with `world.family(TYPE_A, TYPE_B, SPEC)` or `Family1System` / `Family2System` | **3.3–3.6× faster** than unpacked `world.family { ... }` + `World.get`; array-indexed zero-alloc lookup |
+| Whole-tick early-out (`delta <= 0f`, paused, table/terrain not loaded) | Override `shouldProcess(world, delta): Boolean` | Skips `begin`/`process`/`end` in O(1) |
+| Hot `Family1System`/`Family2System`/`IteratingSystem` when 3+ subclasses exist | `override fun update(world: World, delta: Float) = runTick(world, delta) { ... }` | Keeps `process` **monomorphic** on JVM and avoids Wasm `call_ref` (**2.2–3.3× faster** at 10k entities than megamorphic `super.update`) |
+| 3+ components or arbitrary predicate | `IteratingSystem(spec)` or `world.family(spec)` + hoisted `ComponentType<T>` handles | Avoids per-entity `KClass` lookups |
+| HUD windows, Compose UI sync, and Store effect draining | `SceneBridge` (`SceneAppDsl.bridge { ... }`) + `ContextualEffectDrainer<C>` (never an ECS `System`) | Keeps Compose out of ECS, resolves `localPlayer` once per frame instead of N times, gives 0-frame click latency (`beforeAdvance` drain / `afterAdvance` sync), and closes all owned stores automatically |
 
 - Lead `queryEach` with the narrowest component (a player/active marker before `MovementControl`;
   `MeshRenderer` / `ParticleEmitter` / `ParticleEmitterSource` before `Transform`). Never scan
   `queryEach(Transform::class)` across the entire scene on a timer.
-- **Keep off-screen and interest-hidden entities asleep and excluded.** In large streamed or
-  networked worlds, attach a sleep tag/component to entities outside interest reach (and strip
-  per-frame locomotion/controller components if the server owns their transforms). Iterate only
-  active entities via `world.familyExcluding(A::class, B::class, Exclude::class)` (packed
-  `Family1`/`Family2` with zero per-entity `World.get` lookups) or subclass `Family1System` /
-  `Family2System` / `IteratingSystem` (which automatically cache and rebind the family on
-  `World.generation` changes) — never scan every entity in the world and check a visibility boolean
-  per frame.
+- **Keep off-screen, static, and interest-hidden entities asleep and excluded with `FamilySpec`.**
+  In large streamed or networked worlds, attach a sleep tag/component to entities outside interest
+  reach (and strip per-frame locomotion/controller components if the server owns their transforms).
+  Hoist a reusable `FamilySpec` constant (`val AWAKE = FamilySpec.exclude(Asleep::class)` or
+  `familySpec { all(...); exclude(...) }`) and iterate packed columns via
+  `world.family(TYPE_A, TYPE_B, AWAKE)` or `Family1System` / `Family2System` (3.3–3.6× faster than
+  unpacked `world.family { ... }` + `World.get`, and zero allocations on warmed worlds). Never use
+  deprecated `familyExcluding(...)` or scan every entity in the world checking a boolean per frame.
+- **Avoid megamorphic `process()` overhead on hot `IteratingSystem` / `Family1System` / `Family2System` subclasses.**
+  When 3+ subclasses share the inherited `update()`, HotSpot stops inlining `process()` (~2.2–3.3×
+  slower at 10k entities) and Wasm emits indirect `call_ref` per entity. Gate whole-tick early-outs
+  with `shouldProcess(world, delta)` and forward hot subclasses through inline `runTick`:
+  `override fun update(world: World, delta: Float) = runTick(world, delta) { e, a, b -> process(world, delta, e, a, b) }`.
 - **Pass inline lambda literals to `queryEach` and `family.forEach`.** Never pass a function
   reference (`::step`) or `(Entity, A) -> Unit` value; non-inlined calls box every `Entity` handle
   on JVM, Android, and Wasm.
@@ -69,3 +83,26 @@ dynamic resolution ranges on mobile tiers:
   active reach by graphics tier and view distance.
 - Lock mobile tier ceilings (`cascades * mapSize²`, anisotropy, spawn caps, reach) with a unit test
   so future preset edits cannot regress mobile GPU cost silently.
+
+## 5. Dense-world streaming budgets, shadow culling, and raycast picking
+
+- **Share one per-frame node budget across overlapping cell streamers.** When multiple prop or
+  clutter cell layers overlap (far/mid/near), drive them from a single coordinator using
+  `BudgetedCellNodeSpawner.stepDespawns(remaining)` and `stepSpawns(remaining)` so crossing a
+  multi-cell seam never multiplies node spawns by the number of layers.
+- **Skip out-of-reach idle cell streamers in O(1).** Precompute each streamer's cell-center AABB
+  bounds and skip observer updates when the camera is beyond `loadRadius` and no cells are active,
+  waiting, or leaving.
+- **Cap heavy terrain-surface spawns to 1 per frame.** Multi-area junctions can deliver multiple
+  prefabs in one tick; drain at most one surface upload per frame so traversal stays hitch-free.
+- **Retain recently evicted meshes and cull tiny/clutter shadow casters.** Configure tier-scaled
+  `retainedMeshBudgetBytes` (preventing cell-seam GPU buffer re-upload churn) and
+  `minShadowCasterRatio` on the scene app DSL, and disable `castsShadows` on near ground-clutter
+  and grass-foliage layers while keeping architecture, trees, NPCs, and players casting shadows.
+- **Exclude `StaticTransform` in per-frame mover picking.** Raycast picking over dynamic entities
+  must query `world.family(TRANSFORM, MESH_BOUNDS, FamilySpec.exclude(StaticTransform::class))`
+  with cached `ComponentType` / `ComponentTypeId` handles instead of scanning thousands of static
+  scenery props every frame.
+- **Guard perf invariants in unit tests.** Lock shared cell budgets, clutter shadow culling,
+  1-surface/frame caps, retained mesh budgets, and zero allocating `.drainEffects()` / deprecated
+  `familyExcluding(` usage with fast JVM tests so FPS regressions fail CI immediately.
