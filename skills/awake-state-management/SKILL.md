@@ -67,7 +67,9 @@ object EditorContract {
 Effect when work must leave the reducer. Reducers do not write files, mutate the World, load
 assets, call the renderer, or start an uncontrolled coroutine.
 
-`StateFlow` plus a buffered `Channel<Effect>` is the established sample implementation. Flow and
+`StateFlow` plus a buffered `Channel<Effect>` is provided out of the box by `:awake:core:state`
+(`reducerStore` / `DefaultReducerStore` for pure reducers, `MutableEffectStore` for custom domain
+methods — never hand-roll a duplicate `MutableStateFlow` + `Channel<Effect>` store). Flow and
 coroutines are allowed outside the frame loop; a retained Compose tree does not collect them.
 During a frame it reads the current state snapshot and dispatches intents through explicit
 callbacks. The application/session owner drains effects synchronously once per frame using the
