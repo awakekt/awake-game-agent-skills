@@ -8,7 +8,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-09-13'
+  last-updated: '2026-11-25'
   keywords: Awake Compose, layout, Row, Column, FlowRow, FlowColumn, FlexBox, fixed size, adaptive size, Spacer, alignment, showcase
 ---
 
@@ -87,7 +87,12 @@ verified.
   `alignItems`, or `alignContent`.
 - Configure container behavior through `FlexBoxConfig`; configure direct-child behavior through
   `Modifier.flex { ... }`. Do not put `Modifier.flex` on a grandchild and expect the FlexBox to
-  consume it.
+  consume it. Hoist or `remember` static `FlexBoxConfig` instances so `FlexBox` reuses its retained
+  measure policy (`0 B` steady-state composition).
+- `FlexBox` uses an intrinsic planning pass during measure to resolve flex basis, grow/shrink, and
+  wrapping; keep `Row`, `Column`, and `Box` for non-flex 1D or stacked HUD layouts (all are `inline`
+  with single-pass measure and `0 B` steady-state composition). Use `LocalViewportSize.current` with
+  `Box` instead of `BoxWithConstraints` when a screen or HUD only needs viewport dimensions.
 - `rowGap` is the cross-axis gap and `columnGap` is the main-axis gap for the configured flex
   direction. Prefer `gap(value)` when both should be equal.
 - Flex growth and shrink are line-local. If the UI only needs one remaining-width pane, a `Row`
