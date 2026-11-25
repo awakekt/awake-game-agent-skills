@@ -7,8 +7,8 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-07'
-  keywords: Awake, Platform, Bootstrap, AppSpec, AppModule, ComposeHost, SceneSession, lifecycle
+  last-updated: '2026-11-25'
+  keywords: Awake, Platform, Bootstrap, AppSpec, AppModule, ComposeHost, SceneSession, lifecycle, MemoryPressure, DeviceProfile, ThermalState, FileCrashStorage, BrowserTransportOptions
 ---
 
 # Awake App Composition
@@ -58,6 +58,23 @@ test that order before changing bootstrap or platform lifecycle code.
 
 The scene session may run fixed and frame schedules, but it is installed by the app root rather
 than creating another application loop.
+
+## Host Platform Contracts, Memory Pressure & Android Threading (Awake 0.77+)
+
+- **Android `AwakeSurfaceView` runs lifecycle callbacks off the UI thread:** `WindowLifecycle.create`,
+  `restoreSurface`, `resize`, insets, `update`, `releaseSurface`, and `dispose` execute exclusively
+  on `AwakeSurfaceView-Render` so cold-launch shader compilation never triggers an Android 5 s ANR.
+  Do not touch Android `View` APIs directly inside `WindowLifecycle` callbacks; post UI work to the
+  main handler instead.
+- **Cross-platform memory pressure, device profile, and crash storage:** Use `MemoryPressure`
+  (`MemoryPressureLevel`), `DeviceProfile` (`ThermalState`), and `WeakRef` (`:awake:core:host`)
+  plus `FileCrashStorage` (`:awake:core:diagnostics`) rather than ad-hoc platform wrappers. On
+  Android, hook background/UI-hidden trim levels (`TRIM_MEMORY_UI_HIDDEN`, `TRIM_MEMORY_BACKGROUND`),
+  not only critical low-memory callbacks, to shed non-essential caches before the OS low-memory
+  killer terminates the backgrounded process.
+- **Web transport & WebGPU resilience:** Configure `BrowserTransportOptions`
+  (`:awake:project:transport-browser`) for explicit timeouts and bounded retries on slow mobile web
+  connections, and let WebGPU device-lost guards abort submissions cleanly.
 
 ## Routing
 

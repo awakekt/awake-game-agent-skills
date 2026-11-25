@@ -7,8 +7,8 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-21'
-  keywords: Awake, ECS, World, Entity, SceneDocument, SceneSession, SceneSchedule, TransformSystem, RenderSystem3D
+  last-updated: '2026-11-25'
+  keywords: Awake, ECS, World, Entity, SceneDocument, SceneSession, SceneSchedule, TransformSystem, RenderSystem3D, StaticColliderStreamSystem
 ---
 
 # Awake ECS Scene Runtime
@@ -70,6 +70,13 @@ Use the `scene:physics` components; never touch a Jolt handle or native pointer 
 - Tuning (speeds, gravity, jump height) is a field on a scene component that the game or template
   authors as data, not a constant in a system.
 - Destroying an entity removes its body first; do not cache body handles past entity teardown.
+- For large open worlds on memory-constrained mobile targets, opt into `StaticColliderStreamSystem`
+  (`:awake:project:runtime`) so distant static colliders stream in and out around the active player
+  instead of staying resident simultaneously; `SceneDocument` AST data and `SceneTerrain` sample
+  arrays are released automatically after instantiation (Awake 0.77+).
+- Prefer `:awake:scene:physics` raycast, shape-cast, and overlap queries (low-allocation on Jolt
+  from Awake 0.77+, with native multi-body ignore lists and zero per-query JVM cleaner churn) over
+  hand-rolled per-frame triangle sweeps.
 
 Changing the physics contract or the Jolt bridge itself: `awake-physics-jolt`.
 

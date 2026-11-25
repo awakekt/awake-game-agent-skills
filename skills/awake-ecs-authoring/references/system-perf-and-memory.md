@@ -83,6 +83,15 @@ dynamic resolution ranges on mobile tiers:
   active reach by graphics tier and view distance.
 - Lock mobile tier ceilings (`cascades * mapSize²`, anisotropy, spawn caps, reach) with a unit test
   so future preset edits cannot regress mobile GPU cost silently.
+- **Never trust RAM size alone for mobile auto-tiering.** Entry-level Android phones frequently
+  report 6–8 GB (including expanded virtual RAM) paired with weak mobile GPUs (e.g., PowerVR Rogue
+  or low-core Mali). Maintain an explicit GPU + SoC weak-chip table backed by real device
+  performance reports, matching the SoC at startup before initial textures/shadows allocate and
+  re-tiering once the renderer reports the GPU name.
+- **Pause web loading stall timers while `document.hidden` is true.** Browsers throttle or suspend
+  `requestAnimationFrame` on background tabs; accumulate load/stall idle timers only while the tab
+  is visible and grant a fresh visible grace window on `hidden -> visible` transitions so
+  background-opened tabs do not fire false stall errors.
 
 ## 5. Dense-world streaming budgets, shadow culling, and raycast picking
 
@@ -106,6 +115,30 @@ dynamic resolution ranges on mobile tiers:
 - **Guard perf invariants in unit tests.** Lock shared cell budgets, clutter shadow culling,
   1-surface/frame caps, retained mesh budgets, and zero allocating `.drainEffects()` / deprecated
   `familyExcluding(` usage with fast JVM tests so FPS regressions fail CI immediately.
+
+## 6. Hot-path CPU mesh/geometry work, realistic probes, and Wasm hygiene
+
+- **Never CPU-skin full meshes or run brute-force `O(V × T)` triangle scans per frame.** When a
+  system computes per-frame seat/contact/IK fits from animated meshes:
+  - Always skin into pre-allocated reusable `FloatArray` buffers (`out` + offset) — never omit the
+    destination array and allocate a fresh `FloatArray` per part each frame.
+  - Skin only the required vertex subset (caching vertex indices and invalidating cleanly on
+    equipment, visibility, or variant changes) instead of skinning thousands of unused suit/body
+    vertices every frame.
+  - Accelerate point-under-triangle surface queries with a zero-allocation 2D spatial grid plus
+    per-triangle AABB pre-rejection, fuse left/right passes, and use unboxed `Float.NaN` sentinels
+    instead of nullable `Float?` inside inner loops.
+- **Cache child part entities and `SpawnedNode.entities` on active state.** Avoid per-frame
+  world-wide `queryEach` scans to rediscover one entity's own child parts, and cache
+  `SpawnedNode.entities` when iterating mount/attachment children every frame instead of building a
+  fresh list each tick.
+- **Feed real geometry into allocation probes (`-XX:-DoEscapeAnalysis`).** A probe that constructs a
+  system with `meshes = null` or `spawn = null` exits early before the real hotpath and reports
+  `0 B/frame` while production churns megabytes per frame. Supply synthetic in-memory meshes,
+  skeletons, and bystander entities so CI gates the actual per-frame skinning and query loops.
+- **Never pass a local function reference (`::localFn`) to a non-inlined function in shared/Wasm
+  code.** Kotlin/Wasm emits local function-reference reflection metadata that embeds the absolute
+  source file path into the production `.wasm` binary; pass a plain lambda `{ ... }` instead.
 
 ## Idle HUD/window systems and per-system allocation gates
 
