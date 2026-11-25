@@ -12,7 +12,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-23'
+  last-updated: '2026-11-25'
 ---
 
 # Authoring ECS components, systems and scenes in Awake
@@ -240,4 +240,5 @@ through to whatever outer extension does match.
 - [ ] Spatial streamers scale reach and per-frame spawn budgets with view distance and graphics tier.
 - [ ] Editor tool parameters and asset references live in ECS components on the entity, never in UI-only memory.
 - [ ] No Compose UI (`com.awakekt.awake.compose.*`), window registries, or per-window `AutoCloseable` store wrappers inside ECS `System` classes; bridge UI/HUD stores via `SceneBridge` + `ContextualEffectDrainer` at the session boundary (`awake-state-management`).
+- [ ] Closed/idle HUD and window systems early-return before projecting view models or lists, project views only when state changes, watermark async/unloaded attempts separately from rendered state, and stay under a per-system idle allocation ceiling ([system-perf-and-memory.md](references/system-perf-and-memory.md)).
 - [ ] New nested DSL receivers are `@DslMarker`-annotated.

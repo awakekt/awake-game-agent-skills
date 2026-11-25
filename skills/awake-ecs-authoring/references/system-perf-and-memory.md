@@ -106,3 +106,25 @@ dynamic resolution ranges on mobile tiers:
 - **Guard perf invariants in unit tests.** Lock shared cell budgets, clutter shadow culling,
   1-surface/frame caps, retained mesh budgets, and zero allocating `.drainEffects()` / deprecated
   `familyExcluding(` usage with fast JVM tests so FPS regressions fail CI immediately.
+
+## Idle HUD/window systems and per-system allocation gates
+
+Every `System.update` runs every tick even when its window or panel is closed. Prevent steady-state
+GC churn from creeping back into systems:
+
+- **Early-return while closed and idle.** When a window/panel system is closed with no queued
+  intents, no active drag/drop, and no open sub-sheet or mode, return before building view models,
+  row/slot lists, or lookup helpers (keep only lightweight O(1) tracking that must observe
+  background changes).
+- **Project UI views only when inputs change.** Build derived view models or formatted HUD state
+  strictly inside `if (next != current)` — or reuse the previous steady-state snapshot when all
+  primitive stats, buffs, and trails are unchanged — never unconditionally on every frame. Skip
+  `intents.toList()` when empty and guard empty drag queues before passing drop lambdas.
+- **Watermark async/streaming attempts separately from rendered state.** When a system spawns or
+  dresses streamed components (such as meshes whose renderer has not loaded yet), record the
+  attempted version/appearance before skipping missing renderers so unloaded or headless entities do
+  not re-run the full spawn/dress pass every tick.
+- **Enforce a per-system idle allocation ceiling in CI.** Alongside a total systems ceiling, assert
+  a tight per-system idle cap (e.g., `<= 1 KB/frame` per system under `-XX:-DoEscapeAnalysis`) so
+  any newly added leaky system fails CI immediately and names the exact offending `*System` class.
+
