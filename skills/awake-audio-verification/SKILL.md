@@ -8,8 +8,8 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-07'
-  keywords: Awake audio, AudioCueQueue, emitAudioCue, AudioSystem, AudioPlayer, NoOpAudioPlayer, SoundHandle, crossedTimelineMarker, ActionPhase, cast-hold loop, earshot, CLAP, LUFS, loop seam
+  last-updated: '2026-11-25'
+  keywords: Awake audio, AudioCueQueue, emitAudioCue, AudioSystem, AudioPlayer, NoOpAudioPlayer, SoundHandle, AudioClip, durationMillis, OneShotTrackReaper, crossedTimelineMarker, ActionPhase, cast-hold loop, earshot, CLAP, LUFS, loop seam
 ---
 
 # Awake Audio Verification
@@ -99,6 +99,7 @@ Use the `RecordingAudioPlayer` above to verify `AudioSystem` without opening a h
 - Assert that 3D emitters pass attenuated `volume` and stereo `pan` matching `PositionalAudioMath` for the listener's `Transform` and `AudioListener`.
 - Assert that the same-frame schedule order (your gameplay systems, then `AnimationSystem`, then your cue system, then `AudioSystem`) drains `AudioCueQueue.pending` to empty by the end of the frame (zero-frame cue latency).
 - Give `AudioSystem` every cue clip by path. It skips a queued cue whose clip it doesn't have.
+- For finite one-shot clips (Awake 0.77+), `AudioClip.durationMillis()` drives `OneShotTrackReaper` (including automatic Android `MODE_STATIC` track reaping); ensure cooked PCM metadata yields `durationMillis() > 0` so one-shot handles never leak.
 
 ---
 

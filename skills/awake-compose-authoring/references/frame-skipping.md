@@ -15,6 +15,27 @@ recomposes or re-measures the whole tree. Write UI that stays correct with them 
   invalidates measure every frame and even an idle panel pays subcomposition cost. Use
   `LocalViewportSize.current` with `Box` when you only need viewport bounds; size from placement
   otherwise, and read `LocalFrameClock` in draw, only while something moves.
+- **Pace continuous HUD feeds and quantize floats before writing snapshot state.** Because skipping
+  is root-wide, a single HUD piece mutating raw unquantized floats at 60–120 Hz (minimap bounds,
+  camera heading, roaming entity markers, skill/buff cooldown progress, pulse curves, fade alphas,
+  visual touch-stick offsets) defeats skipping for every window and HUD piece on screen:
+  - Pace continuous HUD updates (such as minimaps or roaming markers) to ~10 Hz while flushing
+    **discrete changes** (open/close, zoom, title, selection, intents, teleports, layout changes)
+    on the very next frame with zero lag.
+  - Quantize continuous floats to visible visual steps before publishing snapshot state (`coords`,
+    `heading`, cooldown/cast/speed fractions, chip trails, fade alpha, visual thumbstick position),
+    keeping raw unquantized values only in simulation/input controls.
+  - Hoist callback lambdas out of per-frame state objects (fresh `{ ... }` closures inside a `data
+    class` fail structural equality every frame), cache derived lists by revision, skip inactive or
+    off-theme animations, and guard writes with identity + structural checks before assigning
+    `state.value`.
+  - Lock active-gameplay skip rate with a deterministic `ComposeHost` test
+    (`skipUnchangedComposition = true`, `skipUnchangedMeasure = true`) covering walking, camera
+    panning, nearby moving entities, and active cooldowns — asserting most frames skip while
+    discrete interactions apply on the very next frame.
+- **Never pass a local function reference (`::localFn`) to a non-inlined function in shared/Wasm
+  code.** Kotlin/Wasm emits local function-reference reflection metadata embedding the absolute
+  source file path into the production `.wasm` binary. Pass a plain lambda `{ ... }` instead.
 - **Compare with two runs a side.** Frame cost on one build can settle at two levels between runs.
   A before/after claim needs two agreeing runs of each side on the same commit.
 
