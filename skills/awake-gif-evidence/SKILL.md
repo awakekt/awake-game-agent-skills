@@ -4,7 +4,7 @@ description: Turn a headless Awake test run into an animated GIF that proves a c
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-21'
+  last-updated: '2026-11-27'
 ---
 
 # Awake: GIF Evidence
@@ -38,8 +38,14 @@ with no GPU.
 3. After each step, draw and read the frame back with `GraphicsEngine.readPresentedPixels` (or
    `Renderer.readPresentedPixels`). The `TextureAsset` it returns is tightly packed RGBA8, `width`
    by `height`.
-4. Write each frame as `frame-0000.png`, `frame-0001.png`, ... into one directory per clip. On the
-   JVM, `BufferedImage` and `ImageIO` write a PNG with no new dependency.
+4. Write each frame as `frame-0000.png`, `frame-0001.png`, ... into one directory per clip using
+   Awake's built-in PNG helpers — never hand-write a `BufferedImage` / `ImageIO` pixel loop:
+   - `TextureAsset.writePng` (`:awake:backend:vulkan` desktop) writes the RGBA8 `TextureAsset` from
+     `readPresentedPixels` / `readPixels` / `playHeadless` directly to a `File` (creating parent
+     directories automatically).
+   - `VulkanEngine.snapshotPng` runs `playHeadless` and writes a single still PNG in one call.
+   - `PixelMap.writePng` (`:awake:engine:render:testing` desktop) writes a `PixelMap` directly when
+     the test only depends on the render-testing module.
 5. Read back every Nth step rather than every step when the simulation runs faster than the clip:
    at 60 steps a second, every 5th step gives 12 fps.
 
