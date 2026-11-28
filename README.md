@@ -45,6 +45,7 @@ that wants the game skills pins awake-game-agent-skills itself.
 | `awake-fbx-asset-cooking` | Convert FBX source assets, including Mixamo characters and clips, into Awake-compatible GLB assets |
 | `awake-net-authoring` | Author multiplayer game protocols, binary packets (`PacketFormat`, `PacketOpcodeRegistry`), Protobuf/JSON channels, and authoritative Ktor game servers (`GameServerHost`, `GameFeature`) |
 | `awake-render-debug-views` | Look inside an Awake 3D frame instead of guessing |
+| `awake-reusable-systems` | Design reusable, game-agnostic gameplay, world, and multiplayer libraries on Awake with neutral mechanisms, layered DAG boundaries, pairwise glue modules, and UI-free deterministic state |
 | `awake-shadcn-recipe-consuming` | Consume Awake's in-repository shadcn design system from a sample, game, or application |
 | `awake-state-management` | Manage Awake application, editor, sample, and in-game HUD state with a thin Store/Contract, MVI, or UDF shape |
 | `awake-terrain-authoring` | Author Awake heightmaps, dynamic terrain edits, geometry clipmaps, texture splatting, and terrain collision composition |
