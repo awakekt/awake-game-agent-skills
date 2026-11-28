@@ -219,6 +219,31 @@ val override = DirectorRuntimeOverride(
 app { scene("trailer") { runProject(loadedProject, directorOverride = override) } }
 ```
 
+### Wiring a Custom Game Audio System for Director Capture
+
+`runProject` forwards `DirectorRuntimeOverride.audioPlayer` to every `SceneFeature` through
+`SceneHostServices.audio`. Custom game audio systems must read `services.audio` first and avoid
+disposing a host-owned player when the scene closes (so multi-scene `TrailerReel` captures keep the
+shared `OfflineAudioMixer` buffer intact):
+
+```kotlin
+plan.frame("audio") { services ->
+    val hostAudio = services.audio
+    GameAudioSystem(
+        clips = clips,
+        player = hostAudio ?: AudioPlayerFactory.create(),
+        ownsPlayer = hostAudio == null,
+    )
+}
+// In GameAudioSystem.close():
+// if (ownsPlayer) player.dispose() else player.stopMusic()
+```
+
+If a capture runs warmup ticks before recorded frame `0`, wrap the `OfflineAudioMixer` in a thin
+`AudioPlayer` delegate that drops `playSound` calls until recording starts, suppresses regional
+town/field BGM when a trailer score replaces it, and leaves `dispose()` as a no-op until
+`OfflineAudioMixer.encodeWav()` finishes.
+
 ## 6. Fixing `ShotFramingMetrics` Warnings
 
 | Warning from `FramingAnalyzer` | Root cause | Fix |
