@@ -9,7 +9,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-23'
+  last-updated: '2026-11-28'
 ---
 
 # Awake: Camera Director & Trailer Capture
@@ -81,10 +81,20 @@ A static flat-lit camera move looks like a debug viewer. Layer `lightingTrack`, 
     for contrast, saturation, white balance, and bloom shifts. `DirectorSystem` always applies
     `ToneMappingMode.Passthrough` on `ToneMappingGradeEffect` so lit scene color is never double
     tone-mapped.
-- **Mix audio deterministically.** `OfflineAudioMixer` implements `AudioPlayer` and mixes in-game
-  3D `AudioSystem` sounds, `AudioCueSpec.PlaySfx` cues, and `MusicTrackSpec` into one synced 48 kHz
-  stereo WAV. Use `duckMusicGain` on impact SFX so stingers cut cleanly through the music bed, and
-  set `TrailerReel.music` to carry one uninterrupted soundtrack across multi-scene cuts.
+- **Mix audio deterministically — never hand-code SFX in FFmpeg.** `OfflineAudioMixer` implements
+  `AudioPlayer` and mixes in-game 3D `AudioSystem` sounds, custom game audio systems,
+  `AudioCueSpec.PlaySfx` cues, and `MusicTrackSpec` into one sample-locked 48 kHz stereo WAV.
+  - **Custom game audio systems must consume `SceneHostServices.audio`.** In any `SceneFeature`
+    `plan.frame("audio") { services -> ... }` factory, use `services.audio ?: AudioPlayerFactory.create()`
+    and only call `player.dispose()` on `close()` when the system created its own player (`services.audio == null`).
+    Calling `AudioPlayerFactory.create()` unconditionally bypasses `DirectorRuntimeOverride.audioPlayer`
+    and causes `OfflineAudioMixer` to record silence (`0 dB`), tempting brittle post-process SFX hand-placement.
+  - **Separate BGM from SFX cleanly.** Mute or suppress regional/town BGM when scoring a trailer
+    with `MusicTrackSpec` / `TrailerReel.music` while keeping gameplay SFX at full level, and use
+    `duckMusicGain` (or gentle sidechain ducking) so impacts cut cleanly through the music bed.
+  - **Gate warmup audio before frame 0.** When a capture runs warmup ticks before recording, drop or
+    suppress warmup cues until recorded frame `0` and step `OfflineAudioMixer.advance` in exact
+    lockstep with the recorded frames so setup teleports/equips never bleed into the opening frame.
 - **Verify source audio quality.** Pair with
   [awake-audio-verification](../awake-audio-verification/SKILL.md) to validate `.wav`/`.ogg`
   loudness, loop seams, and zero clipping before mixing.
@@ -92,6 +102,11 @@ A static flat-lit camera move looks like a debug viewer. Layer `lightingTrack`, 
 ## 4. Combine Live Gameplay Replay and Scripted Action
 
 Trailers look authentic when real gameplay runs beneath cinematic angles:
+
+- **Drive real gameplay paths, not VFX-only shortcuts.** Trigger authentic gameplay requests
+  (skills, combat, locomotion, riding, swimming, flight) or replay an `InputTake` so character body
+  animations, timeline sound markers, particle emitters, and baked game SFX stay synchronized.
+  Never fake combat shots by spawning isolated particle cues without the real action pipeline.
 
 - **Record once, re-shoot from any angle.** Capture live play with `InputRecordSystem` into an
   `InputTake` (`*.take.json`), then replay it through `InputReplaySystem` (`--take <file>` or
@@ -139,4 +154,8 @@ Choose the preset matching the target channel:
 - [ ] Reviewed an annotated `awake storyboard --guides` / `preview_storyboard` contact sheet and
       resolved unintended occlusion, clipping, dark/blown-out luminance, or ground-clearance issues.
 - [ ] Confirmed `awake capture` produced moving frames and non-silent synced audio (`audioPeakAmplitude > 0`
-      when soundtrack/SFX are authored) and visually watched the rendered output before sharing.
+      when soundtrack/SFX are authored) routed from real in-game audio systems (`SceneHostServices.audio`),
+      not hand-placed post-process SFX.
+- [ ] Inspected zoomed key frames on transparent, water, particle, and HUD beats (catching hard
+      additive texture borders, flipped particle UVs, depth-pass leaks, or overlay text overlap)
+      before sharing the final render.

@@ -7,7 +7,7 @@ description: >
 license: Apache-2.0
 metadata:
   author: awake
-  last-updated: '2026-11-25'
+  last-updated: '2026-11-28'
   keywords: Awake, ECS, World, Entity, SceneDocument, SceneSession, SceneSchedule, TransformSystem, RenderSystem3D, StaticColliderStreamSystem
 ---
 
@@ -42,6 +42,11 @@ then inspect the actual scene runtime API in `awake/scene/runtime` before writin
   instantiate it into a `World`.
 - Let each feature own and tear down the entities it creates when that feature or preview ends.
   Do not discover ownership by scanning the whole world.
+- Custom audio systems planned through `SceneSystemPlan` must accept `SceneHostServices.audio`
+  (`services.audio ?: AudioPlayerFactory.create()`) and must not call `dispose()` on a host-provided
+  `AudioPlayer` in `close()`. That preserves shared browser audio across scene switches and routes
+  in-game SFX straight into `DirectorRuntimeOverride.audioPlayer` (`OfflineAudioMixer`) during
+  directed trailer capture.
 - Separate fixed simulation from frame/render work. Register the renderer's normal scene systems
   once; duplicate render registration produces duplicate submissions.
 - Treat `Transform` as source data. If its system derives a world matrix from position, rotation,
